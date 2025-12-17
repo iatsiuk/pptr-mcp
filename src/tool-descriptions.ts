@@ -1,39 +1,13 @@
-export const executeDescription = [
-  'Execute JavaScript in Node.js VM with Puppeteer browser <%= version %>.',
-  '',
-  'BROWSER MODE:',
-  '- persistent=true (default): reuses browser session across calls, faster',
-  '- persistent=false: fresh isolated browser per call, no state leakage',
-  '',
-  'GLOBALS: browser (Browser instance), console.log/error/warn/info, setTimeout, clearTimeout, URL, URLSearchParams',
-  'RESTRICTIONS: require/import not available. Code must return JSON-serializable data.',
-  'CLEANUP: Pages and browser contexts created during execution are auto-closed on completion.',
-  '',
-  'WORKFLOW:',
-  '1. const page = await browser.newPage();',
-  '2. await page.goto(url);',
-  '3. // interact: click, type, waitForSelector, evaluate, screenshot',
-  '4. const data = await page.evaluate(() => document.title);',
-  '5. return data; // must be JSON-serializable',
-  '',
-  'COMMON METHODS:',
-  '- page.goto(url, {waitUntil: "networkidle0"})',
-  '- page.screenshot({path: "/path/to/image.jpg", type: "jpeg", quality: 85})',
-  '- page.click(selector), page.type(selector, text)',
-  '- page.waitForSelector(selector)',
-  '- await new Promise(r => setTimeout(r, ms)) // sleep',
-  '- page.$eval(selector, el => el.textContent)',
-  '- page.$$eval(selector, els => els.map(e => e.href))',
-  '- page.evaluate(() => window.scrollTo(0, 9999))',
-  '- page.content() // get page HTML',
-  '- page.setViewport({width: 1920, height: 1080})',
-  '- page.pdf({format: "A4"}) // returns PDF buffer',
-  '- page.waitForNavigation({waitUntil: "networkidle0"}) // after click',
-  '- page.$(selector), page.$$(selector) // select element(s)',
-  '',
-  'TAKING SCREENSHOTS:',
-  '1. const path = "/tmp/" + Date.now() + ".jpg";',
-  '2. await page.screenshot({path, type: "jpeg"});',
-  '3. return {screenshot: path};',
-  '',
-].join('\n');
+export const executeDescription = `Execute JavaScript in Node.js VM with Puppeteer <%= version %>.
+
+MODES: persistent=true (default) reuses browser/session; persistent=false creates fresh isolated profile (no state leakage).
+GLOBALS: browser, console.log/error/warn/info, setTimeout/clearTimeout, URL, URLSearchParams.
+RESTRICTIONS: No require/import. Return JSON-serializable data.
+CLEANUP: Pages/contexts auto-closed on completion. Do NOT close browser manually.
+
+EXAMPLE:
+const page = await browser.newPage();
+await page.goto(url, {waitUntil: "networkidle0"});
+return await page.evaluate(() => document.title);
+
+SCREENSHOT: await page.screenshot({path: "/tmp/img.jpg", type: "jpeg", quality: 85});`;

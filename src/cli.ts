@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { setLaunchArgs } from './browser-manager.js';
 import { server, log } from './index.js';
