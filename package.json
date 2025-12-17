@@ -1,0 +1,41 @@
+{
+  "name": "pptr-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "prebuild": "npm run format && npm run lint && npm run test",
+    "build": "tsc",
+    "lint": "eslint src/ test/",
+    "format": "prettier --write src/ test/",
+    "test": "node --import tsx --test --test-concurrency=1 'test/**/*.test.ts' 'test/*.test.ts'",
+    "start": "node dist/src/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "mcp",
+    "puppeteer",
+    "browser-automation"
+  ],
+  "license": "WTFPL",
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@tsconfig/node22": "^22.0.5",
+    "@tsconfig/strictest": "^2.0.8",
+    "@types/node": "^25.0.3",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.7.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "chrome-launcher": "^1.2.1",
+    "puppeteer-core": "^24.33.0",
+    "zod": "^4.2.1"
+  }
+}

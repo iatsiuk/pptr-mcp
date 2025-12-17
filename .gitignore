@@ -1,0 +1,14 @@
+**
+
+!/src/
+!/src/**
+!/test/
+!/test/**
+!/README.md
+
+!/.gitignore
+!/package.json
+!/tsconfig.json
+!/package-lock.json
+!/.prettierrc
+!/eslint.config.js
