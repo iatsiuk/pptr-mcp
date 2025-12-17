@@ -87,3 +87,24 @@ Executes JavaScript code with access to Puppeteer browser.
 | ------------ | ------- | -------- | ---------------------------------- |
 | `code`       | string  | required | JavaScript code to execute         |
 | `persistent` | boolean | true     | Reuse browser session across calls |
+
+## Security
+
+This server is designed for **trusted local development** with LLM assistants (Claude Code, Cursor, etc.). The executing code comes from the LLM at your request.
+
+### What this means
+
+- **Not a sandbox**: The Node.js VM isolates code for convenience, not security. It is not designed to run untrusted code.
+- **Full browser control**: Executed code can navigate to any URL, read page content, take screenshots, and interact with web applications.
+- **Chrome runs without sandbox**: `--no-sandbox` flag is used for Docker/container compatibility.
+- **Persistent sessions**: With `persistent: true` (default), cookies and browser state are preserved across calls. Use `persistent: false` for isolation.
+
+### Not designed for
+
+- Multi-tenant or shared server deployments
+- Executing untrusted code from external sources
+- Building web services that accept arbitrary user input
+
+## License
+
+[WTFPL](LICENSE.md)

@@ -77,7 +77,10 @@ export function createServer(logger?: Logger): McpServer {
       try {
         const response = await executeCode(code, browser, timeout);
 
-        return { content: [{ type: 'text', text: JSON.stringify(response) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(response) }],
+          isError: !response.success,
+        };
       } finally {
         if (!persistent) {
           await closeBrowser(browser, persistent).catch((err: unknown) => {
