@@ -69,6 +69,15 @@ With custom Chrome flags:
 }
 ```
 
+## Claude Code Plugin
+
+Install as a Claude Code plugin:
+
+```bash
+/plugin marketplace add iatsiuk/pptr-mcp
+/plugin install pptr-mcp@pptr-mcp
+```
+
 ## Environment Variables
 
 | Variable                    | Description                              |

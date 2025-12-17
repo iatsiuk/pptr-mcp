@@ -9,6 +9,9 @@
 !/README.md
 
 !/.gitignore
+!/.claude-plugin/
+!/.claude-plugin/**
+!/.mcp.json
 !/package.json
 !/tsconfig.json
 !/package-lock.json

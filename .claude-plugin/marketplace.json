@@ -1,0 +1,26 @@
+{
+  "name": "pptr-mcp",
+  "owner": {
+    "name": "iatsiuk",
+    "url": "https://github.com/iatsiuk"
+  },
+  "metadata": {
+    "description": "Puppeteer MCP server plugin for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "pptr-mcp",
+      "source": ".",
+      "description": "Browser automation via Puppeteer - execute JavaScript code with direct access to browser instance",
+      "version": "0.1.2",
+      "author": {
+        "name": "iatsiuk"
+      },
+      "homepage": "https://github.com/iatsiuk/pptr-mcp",
+      "repository": "https://github.com/iatsiuk/pptr-mcp",
+      "license": "WTFPL",
+      "keywords": ["mcp", "puppeteer", "browser-automation", "scraping", "testing"],
+      "category": "automation"
+    }
+  ]
+}

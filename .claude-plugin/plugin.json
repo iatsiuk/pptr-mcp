@@ -1,0 +1,13 @@
+{
+  "name": "pptr-mcp",
+  "description": "Browser automation via Puppeteer - execute JavaScript code with direct access to browser instance",
+  "version": "0.1.2",
+  "author": {
+    "name": "iatsiuk",
+    "url": "https://github.com/iatsiuk"
+  },
+  "repository": "https://github.com/iatsiuk/pptr-mcp",
+  "homepage": "https://github.com/iatsiuk/pptr-mcp#readme",
+  "license": "WTFPL",
+  "keywords": ["mcp", "puppeteer", "browser-automation", "scraping", "testing"]
+}
