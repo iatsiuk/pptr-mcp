@@ -161,6 +161,12 @@ export async function cleanupProfile(profilePath: string): Promise<void> {
   }
 }
 
+export function resetBrowserState(): void {
+  persistentBrowser = null;
+  launchPromise = null;
+  executionLock = Promise.resolve();
+}
+
 export function createErrorResponse(
   type: ErrorType,
   error: string,

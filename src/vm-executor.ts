@@ -199,7 +199,11 @@ export async function executeCode(
   const pagesBefore = new Set<Page>(await browser.pages());
   const contextsBefore = new Set<BrowserContext>(browser.browserContexts());
 
+  let cleaned = false;
   const cleanup = async () => {
+    if (cleaned) return;
+    cleaned = true;
+
     for (const id of timers) {
       clearTimeout(id);
     }

@@ -2,7 +2,10 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { closePersistentBrowser } from '../src/browser-manager.js';
+import {
+  closePersistentBrowser,
+  resetBrowserState,
+} from '../src/browser-manager.js';
 import { createServer } from '../src/index.js';
 
 interface ExecutionResponse {
@@ -47,6 +50,7 @@ void describe('integration', () => {
 
   after(async () => {
     await closePersistentBrowser();
+    resetBrowserState();
     await client.close();
     await server.close();
   });

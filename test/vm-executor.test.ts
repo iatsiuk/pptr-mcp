@@ -284,9 +284,11 @@ void describe('executeCode', () => {
       assert.strictEqual(mkdirMock.mock.callCount(), 1);
       assert.strictEqual(writeFileMock.mock.callCount(), 1);
 
-      const writeCall = writeFileMock.mock.calls[0];
-      const writtenPath = writeCall?.arguments[0] as string;
-      const writtenContent = writeCall?.arguments[1] as string;
+      const [writeCall] = writeFileMock.mock.calls;
+      const [writtenPath, writtenContent] = (writeCall?.arguments ?? []) as [
+        string,
+        string,
+      ];
 
       assert.ok(writtenPath.includes('pptr-mcp/results/'));
       assert.ok(writtenPath.endsWith('.txt'));

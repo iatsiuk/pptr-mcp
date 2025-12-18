@@ -11,12 +11,14 @@ import {
   getPersistentBrowser,
   cleanupProfile,
   closePersistentBrowser,
+  resetBrowserState,
   saveResultToFile,
 } from '../src/browser-manager.js';
 
 void describe('browser-manager', () => {
   afterEach(async () => {
     await closePersistentBrowser();
+    resetBrowserState();
   });
 
   void describe('getCustomChromePath', () => {
@@ -212,12 +214,16 @@ void describe('browser-manager', () => {
         assert.strictEqual(mkdirMock.mock.callCount(), 1);
         assert.strictEqual(writeFileMock.mock.callCount(), 1);
 
-        const writeCall = writeFileMock.mock.calls[0];
+        const [writeCall] = writeFileMock.mock.calls;
 
         assert.ok(writeCall, 'writeFile should have been called');
-        assert.strictEqual(writeCall.arguments[0], filePath);
-        assert.strictEqual(writeCall.arguments[1], content);
-        assert.strictEqual(writeCall.arguments[2], 'utf-8');
+
+        const [writtenPath, writtenContent, writtenEncoding] =
+          writeCall.arguments;
+
+        assert.strictEqual(writtenPath, filePath);
+        assert.strictEqual(writtenContent, content);
+        assert.strictEqual(writtenEncoding, 'utf-8');
       } finally {
         writeFileMock.mock.restore();
         mkdirMock.mock.restore();

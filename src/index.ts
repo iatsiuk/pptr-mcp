@@ -3,6 +3,7 @@ import type { Browser } from 'puppeteer-core';
 import pptrPkg from 'puppeteer-core/package.json' with { type: 'json' };
 import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
+import { getInstallStatus } from './browser-installer.js';
 import {
   getPersistentBrowser,
   launchBrowser,
@@ -52,6 +53,20 @@ export function createServer(logger?: Logger): ServerWithLogger {
       },
     },
     async ({ code, persistent }) => {
+      const status = getInstallStatus();
+
+      if (status.installing) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Chrome browser is being downloaded (${String(status.progress)}% complete). Please retry in a couple of minutes.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
       const profilePath = getProfilePath(persistent);
       const timeout = parseInt(
         process.env['PPTR_MCP_TIMEOUT'] ?? String(DEFAULT_TIMEOUT),

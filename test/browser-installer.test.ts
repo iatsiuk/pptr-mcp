@@ -96,4 +96,31 @@ void describe('browser-installer', () => {
       assert.ok(typeof path2 === 'string' && path2.length > 0);
     });
   });
+
+  void describe('getInstallStatus', () => {
+    void it('returns installing: false when browser is already installed', async () => {
+      const { ensureBrowserInstalled, getInstallStatus } =
+        await import('../src/browser-installer.js');
+
+      // ensure browser is installed
+      await ensureBrowserInstalled();
+
+      const status = getInstallStatus();
+
+      // when browser already exists, no download happens, so installing should be false
+      assert.strictEqual(status.installing, false);
+    });
+
+    void it('resets status after resetInstallerState', async () => {
+      const { resetInstallerState, getInstallStatus } =
+        await import('../src/browser-installer.js');
+
+      resetInstallerState();
+
+      const status = getInstallStatus();
+
+      assert.strictEqual(status.installing, false);
+      assert.strictEqual(status.progress, 0);
+    });
+  });
 });

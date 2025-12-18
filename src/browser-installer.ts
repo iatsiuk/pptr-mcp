@@ -16,6 +16,17 @@ const CACHE_DIR =
 let installPromise: Promise<string> | null = null;
 let cachedExecutablePath: string | null = null;
 
+export interface InstallStatus {
+  installing: boolean;
+  progress: number; // 0-100
+}
+
+let installStatus: InstallStatus = { installing: false, progress: 0 };
+
+export function getInstallStatus(): InstallStatus {
+  return { ...installStatus };
+}
+
 export function getCacheDir(): string {
   return CACHE_DIR;
 }
@@ -52,11 +63,22 @@ async function doEnsureBrowser(): Promise<string> {
 
   const buildId = await resolveBuildId(Browser.CHROME, platform, 'stable');
 
-  await install({
-    browser: Browser.CHROME,
-    buildId,
-    cacheDir: CACHE_DIR,
-  });
+  installStatus = { installing: true, progress: 0 };
+
+  try {
+    await install({
+      browser: Browser.CHROME,
+      buildId,
+      cacheDir: CACHE_DIR,
+      downloadProgressCallback: (downloadedBytes, totalBytes) => {
+        const progress = Math.round((downloadedBytes / totalBytes) * 100);
+
+        installStatus = { installing: true, progress };
+      },
+    });
+  } finally {
+    installStatus = { installing: false, progress: 100 };
+  }
 
   cachedExecutablePath = computeExecutablePath({
     browser: Browser.CHROME,
@@ -70,4 +92,5 @@ async function doEnsureBrowser(): Promise<string> {
 export function resetInstallerState(): void {
   installPromise = null;
   cachedExecutablePath = null;
+  installStatus = { installing: false, progress: 0 };
 }
