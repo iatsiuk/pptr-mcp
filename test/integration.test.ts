@@ -38,7 +38,7 @@ void describe('integration', () => {
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'integration-test', version: '1.0.0' });
-  const server = createServer(noopLogger);
+  const { server } = createServer(noopLogger);
 
   before(async () => {
     await server.connect(serverTransport);
@@ -256,6 +256,49 @@ void describe('integration', () => {
     assert.ok(
       typeof response.result === 'string',
       'circular should be stringified'
+    );
+  });
+
+  void it('concurrent persistent calls are serialized (mutex)', async () => {
+    const executionOrder: number[] = [];
+
+    const call = async (id: number, delayMs: number) => {
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: {
+          code: `
+            await new Promise(r => setTimeout(r, ${String(delayMs)}));
+            return ${String(id)};
+          `,
+          persistent: true,
+        },
+      });
+      const response = parseResponse(result.content as unknown[]);
+
+      if (response.success) {
+        executionOrder.push(response.result as number);
+      }
+
+      return response;
+    };
+
+    // launch 3 calls concurrently with different delays
+    // if not serialized, call 3 (10ms) would finish before call 1 (50ms)
+    const [r1, r2, r3] = await Promise.all([
+      call(1, 50),
+      call(2, 30),
+      call(3, 10),
+    ]);
+
+    assert.strictEqual(r1.success, true);
+    assert.strictEqual(r2.success, true);
+    assert.strictEqual(r3.success, true);
+
+    // with mutex, execution order should be 1, 2, 3 (launch order)
+    assert.deepStrictEqual(
+      executionOrder,
+      [1, 2, 3],
+      'calls should execute in launch order due to mutex'
     );
   });
 });

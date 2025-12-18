@@ -38,7 +38,9 @@ export function safeSerialize(value: unknown): unknown {
   }
 }
 
-function createConsole(logs: LogEntry[]): Console {
+type VmConsole = Pick<Console, 'log' | 'error' | 'warn' | 'info'>;
+
+function createConsole(logs: LogEntry[]): VmConsole {
   const pushLog = (level: LogEntry['level'], args: unknown[]) => {
     if (logs.length < MAX_LOGS) {
       logs.push({ level, args: args.map(safeSerialize) });
@@ -60,7 +62,7 @@ function createConsole(logs: LogEntry[]): Console {
     info: (...args: unknown[]) => {
       pushLog('info', args);
     },
-  } as Console;
+  };
 }
 
 export function wrapUserCode(code: string): string {
@@ -116,9 +118,6 @@ function createContext(
     Promise,
     URL,
     URLSearchParams,
-    undefined,
-    NaN,
-    Infinity,
   });
 }
 
@@ -200,6 +199,33 @@ export async function executeCode(
   const pagesBefore = new Set<Page>(await browser.pages());
   const contextsBefore = new Set<BrowserContext>(browser.browserContexts());
 
+  const cleanup = async () => {
+    for (const id of timers) {
+      clearTimeout(id);
+    }
+    timers.clear();
+
+    const pagesAfter = await browser.pages();
+
+    for (const page of pagesAfter) {
+      if (!pagesBefore.has(page)) {
+        await page.close().catch(() => {
+          // ignore close errors
+        });
+      }
+    }
+
+    const contextsAfter = browser.browserContexts();
+
+    for (const ctx of contextsAfter) {
+      if (!contextsBefore.has(ctx)) {
+        await ctx.close().catch(() => {
+          // ignore close errors
+        });
+      }
+    }
+  };
+
   try {
     const context = createContext(browser, logs, timers);
     const wrapped = wrapUserCode(code);
@@ -247,8 +273,14 @@ export async function executeCode(
       logs,
     };
   } catch (error) {
-    const { message, stack } = formatError(error);
     const type = classifyError(error);
+
+    // early cleanup on timeout to terminate pending Puppeteer operations
+    if (type === 'timeout') {
+      await cleanup();
+    }
+
+    const { message, stack } = formatError(error);
     const details: ExecutionError['details'] = { type };
 
     if (stack) {
@@ -262,29 +294,6 @@ export async function executeCode(
       logs,
     };
   } finally {
-    for (const id of timers) {
-      clearTimeout(id);
-    }
-    timers.clear();
-
-    const pagesAfter = await browser.pages();
-
-    for (const page of pagesAfter) {
-      if (!pagesBefore.has(page)) {
-        await page.close().catch(() => {
-          // ignore close errors
-        });
-      }
-    }
-
-    const contextsAfter = browser.browserContexts();
-
-    for (const ctx of contextsAfter) {
-      if (!contextsBefore.has(ctx)) {
-        await ctx.close().catch(() => {
-          // ignore close errors
-        });
-      }
-    }
+    await cleanup();
   }
 }

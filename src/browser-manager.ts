@@ -103,6 +103,27 @@ export async function launchBrowser(profilePath?: string): Promise<Browser> {
 
 let persistentBrowser: Browser | null = null;
 let launchPromise: Promise<Browser> | null = null;
+let executionLock: Promise<void> = Promise.resolve();
+
+export async function withPersistentLock<T>(fn: () => Promise<T>): Promise<T> {
+  const previousLock = executionLock;
+
+  let release: () => void = () => {
+    // will be replaced by Promise resolve
+  };
+
+  executionLock = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  await previousLock;
+
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
 
 export async function getPersistentBrowser(): Promise<Browser> {
   if (persistentBrowser?.connected) {
@@ -141,15 +162,6 @@ export async function closePersistentBrowser(): Promise<void> {
     persistentBrowser = null;
   }
   launchPromise = null;
-}
-
-export async function closeBrowser(
-  browser: Browser,
-  persistent: boolean
-): Promise<void> {
-  if (!persistent) {
-    await browser.close();
-  }
 }
 
 export async function cleanupProfile(profilePath: string): Promise<void> {

@@ -6,10 +6,10 @@ import pkg from '../package.json' with { type: 'json' };
 import {
   getPersistentBrowser,
   launchBrowser,
-  closeBrowser,
   getProfilePath,
   cleanupProfile,
   createErrorResponse,
+  withPersistentLock,
 } from './browser-manager.js';
 import { createLogger, type Logger } from './logger.js';
 import { executeDescription } from './tool-descriptions.js';
@@ -17,7 +17,12 @@ import { executeCode } from './vm-executor.js';
 
 const DEFAULT_TIMEOUT = 30000;
 
-export function createServer(logger?: Logger): McpServer {
+interface ServerWithLogger {
+  server: McpServer;
+  log: Logger;
+}
+
+export function createServer(logger?: Logger): ServerWithLogger {
   const server = new McpServer(
     { name: pkg.name, version: pkg.version },
     { capabilities: { logging: {} } }
@@ -75,7 +80,10 @@ export function createServer(logger?: Logger): McpServer {
       }
 
       try {
-        const response = await executeCode(code, browser, timeout);
+        const execute = () => executeCode(code, browser, timeout);
+        const response = persistent
+          ? await withPersistentLock(execute)
+          : await execute();
 
         return {
           content: [{ type: 'text', text: JSON.stringify(response) }],
@@ -83,7 +91,7 @@ export function createServer(logger?: Logger): McpServer {
         };
       } finally {
         if (!persistent) {
-          await closeBrowser(browser, persistent).catch((err: unknown) => {
+          await browser.close().catch((err: unknown) => {
             log.warning('closeBrowser', { error: String(err) });
           });
           await cleanupProfile(profilePath);
@@ -92,8 +100,7 @@ export function createServer(logger?: Logger): McpServer {
     }
   );
 
-  return server;
+  return { server, log };
 }
 
-export const server = createServer();
-export const log = createLogger(server);
+export const { server, log } = createServer();

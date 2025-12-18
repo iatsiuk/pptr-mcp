@@ -16,4 +16,9 @@ async function main() {
   log.info('server', { status: 'started', chromeArgs: args });
 }
 
-void main();
+main().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+
+  console.error(`pptr-mcp failed to start: ${message}`);
+  process.exit(1);
+});

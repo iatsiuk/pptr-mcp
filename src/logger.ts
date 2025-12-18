@@ -9,22 +9,13 @@ export interface Logger {
 }
 
 export function createLogger(server: McpServer): Logger {
-  const send = (level: LoggingLevel, logger: string, data: unknown) => {
+  const mk = (level: LoggingLevel) => (logger: string, data: unknown) =>
     void server.server.sendLoggingMessage({ level, logger, data });
-  };
 
   return {
-    debug: (logger: string, data: unknown) => {
-      send('debug', logger, data);
-    },
-    info: (logger: string, data: unknown) => {
-      send('info', logger, data);
-    },
-    warning: (logger: string, data: unknown) => {
-      send('warning', logger, data);
-    },
-    error: (logger: string, data: unknown) => {
-      send('error', logger, data);
-    },
+    debug: mk('debug'),
+    info: mk('info'),
+    warning: mk('warning'),
+    error: mk('error'),
   };
 }

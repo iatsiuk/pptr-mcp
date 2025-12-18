@@ -9,7 +9,6 @@ import {
   getProfilePath,
   launchBrowser,
   getPersistentBrowser,
-  closeBrowser,
   cleanupProfile,
   closePersistentBrowser,
   saveResultToFile,
@@ -173,22 +172,6 @@ void describe('browser-manager', () => {
 
       assert.strictEqual(endpoint1, endpoint2, 'all should be same instance');
       assert.strictEqual(endpoint2, endpoint3, 'all should be same instance');
-    });
-  });
-
-  void describe('closeBrowser', () => {
-    void it('closes non-persistent browser', async () => {
-      const browser = await launchBrowser();
-
-      await closeBrowser(browser, false);
-      assert.ok(!browser.connected, 'browser should be disconnected');
-    });
-
-    void it('keeps persistent browser open', async () => {
-      const browser = await getPersistentBrowser();
-
-      await closeBrowser(browser, true);
-      assert.ok(browser.connected, 'browser should still be connected');
     });
   });
 
