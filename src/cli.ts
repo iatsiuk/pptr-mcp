@@ -11,6 +11,12 @@ async function main() {
     setLaunchArgs(args);
   }
 
+  const transport = new StdioServerTransport();
+
+  await server.connect(transport);
+
+  log.info('server', { status: 'started', chromeArgs: args });
+
   // start browser installation in background (fire-and-forget)
   log.info('browser', { status: 'checking' });
   ensureBrowserInstalled()
@@ -23,11 +29,6 @@ async function main() {
         error: String(err),
       });
     });
-
-  const transport = new StdioServerTransport();
-
-  await server.connect(transport);
-  log.info('server', { status: 'started', chromeArgs: args });
 }
 
 main().catch((err: unknown) => {
