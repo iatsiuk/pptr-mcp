@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import puppeteer, { type Browser } from 'puppeteer';
+import puppeteer, { type Browser } from 'puppeteer-core';
+import { ensureBrowserInstalled } from './browser-installer.js';
 
 const BASE_DIR = path.join(os.tmpdir(), 'pptr-mcp');
 const PROFILES_DIR = path.join(BASE_DIR, 'profiles');
@@ -73,16 +74,14 @@ export function setLaunchArgs(args: string[]): void {
 }
 
 export async function launchBrowser(profilePath?: string): Promise<Browser> {
-  const executablePath = getCustomChromePath();
+  const executablePath =
+    getCustomChromePath() ?? (await ensureBrowserInstalled());
 
   const options: Parameters<typeof puppeteer.launch>[0] = {
     headless: true,
     args: [...DEFAULT_ARGS, ...customArgs],
+    executablePath,
   };
-
-  if (executablePath) {
-    options.executablePath = executablePath;
-  }
 
   if (profilePath) {
     options.userDataDir = profilePath;

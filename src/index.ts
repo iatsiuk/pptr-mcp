@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Browser } from 'puppeteer';
-import pptrPkg from 'puppeteer/package.json' with { type: 'json' };
+import type { Browser } from 'puppeteer-core';
+import pptrPkg from 'puppeteer-core/package.json' with { type: 'json' };
 import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
 import {

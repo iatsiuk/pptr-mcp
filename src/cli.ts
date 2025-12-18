@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { ensureBrowserInstalled } from './browser-installer.js';
 import { setLaunchArgs } from './browser-manager.js';
 import { server, log } from './index.js';
 
@@ -9,6 +10,19 @@ async function main() {
   if (args.length > 0) {
     setLaunchArgs(args);
   }
+
+  // start browser installation in background (fire-and-forget)
+  log.info('browser', { status: 'checking' });
+  ensureBrowserInstalled()
+    .then(() => {
+      log.info('browser', { status: 'ready' });
+    })
+    .catch((err: unknown) => {
+      log.warning('browser', {
+        status: 'download-failed',
+        error: String(err),
+      });
+    });
 
   const transport = new StdioServerTransport();
 
