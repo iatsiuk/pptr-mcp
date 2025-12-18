@@ -1,6 +1,6 @@
 {
   "name": "pptr-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP server for browser automation via Puppeteer",
   "author": "iatsiuk",
   "repository": {
@@ -50,8 +50,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "chrome-launcher": "^1.2.1",
-    "puppeteer-core": "^24.33.0",
+    "puppeteer": "^24.4.0",
     "zod": "^4.2.1"
   }
 }

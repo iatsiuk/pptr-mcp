@@ -2,8 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { Launcher } from 'chrome-launcher';
-import puppeteer, { type Browser } from 'puppeteer-core';
+import puppeteer, { type Browser } from 'puppeteer';
 
 const BASE_DIR = path.join(os.tmpdir(), 'pptr-mcp');
 const PROFILES_DIR = path.join(BASE_DIR, 'profiles');
@@ -36,20 +35,8 @@ export interface ExecutionError {
   logs: LogEntry[];
 }
 
-export function findChromePath(): string {
-  const envPath =
-    process.env['CHROME_PATH'] ?? process.env['PUPPETEER_EXECUTABLE_PATH'];
-
-  if (envPath) {
-    return envPath;
-  }
-
-  const chromePath = Launcher.getFirstInstallation();
-
-  if (!chromePath) {
-    throw new Error('Chrome not found. Set CHROME_PATH or install Chrome.');
-  }
-  return chromePath;
+export function getCustomChromePath(): string | undefined {
+  return process.env['CHROME_PATH'] ?? process.env['PUPPETEER_EXECUTABLE_PATH'];
 }
 
 const persistentProfilePath = path.join(PROFILES_DIR, 'persistent');
@@ -86,13 +73,16 @@ export function setLaunchArgs(args: string[]): void {
 }
 
 export async function launchBrowser(profilePath?: string): Promise<Browser> {
-  const executablePath = findChromePath();
+  const executablePath = getCustomChromePath();
 
   const options: Parameters<typeof puppeteer.launch>[0] = {
-    executablePath,
     headless: true,
     args: [...DEFAULT_ARGS, ...customArgs],
   };
+
+  if (executablePath) {
+    options.executablePath = executablePath;
+  }
 
   if (profilePath) {
     options.userDataDir = profilePath;

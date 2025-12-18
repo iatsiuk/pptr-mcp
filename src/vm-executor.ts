@@ -1,6 +1,6 @@
 import vm from 'node:vm';
 import { inspect } from 'node:util';
-import type { Browser, BrowserContext, Page } from 'puppeteer-core';
+import type { Browser, BrowserContext, Page } from 'puppeteer';
 import {
   type LogEntry,
   type ErrorType,

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  findChromePath,
+  getCustomChromePath,
   getProfilePath,
   launchBrowser,
   getPersistentBrowser,
@@ -19,11 +19,26 @@ void describe('browser-manager', () => {
     await closePersistentBrowser();
   });
 
-  void describe('findChromePath', () => {
-    void it('returns path when Chrome installed', () => {
-      const chromePath = findChromePath();
+  void describe('getCustomChromePath', () => {
+    void it('returns undefined when no env set (puppeteer uses bundled browser)', () => {
+      const originalChrome = process.env['CHROME_PATH'];
+      const originalPuppeteer = process.env['PUPPETEER_EXECUTABLE_PATH'];
 
-      assert.ok(chromePath, 'should return a path');
+      delete process.env['CHROME_PATH'];
+      delete process.env['PUPPETEER_EXECUTABLE_PATH'];
+
+      try {
+        const chromePath = getCustomChromePath();
+
+        assert.strictEqual(chromePath, undefined);
+      } finally {
+        if (originalChrome !== undefined) {
+          process.env['CHROME_PATH'] = originalChrome;
+        }
+        if (originalPuppeteer !== undefined) {
+          process.env['PUPPETEER_EXECUTABLE_PATH'] = originalPuppeteer;
+        }
+      }
     });
 
     void it('respects CHROME_PATH env variable', () => {
@@ -32,7 +47,7 @@ void describe('browser-manager', () => {
       process.env['CHROME_PATH'] = '/custom/chrome/path';
 
       try {
-        const chromePath = findChromePath();
+        const chromePath = getCustomChromePath();
 
         assert.strictEqual(chromePath, '/custom/chrome/path');
       } finally {
@@ -52,7 +67,7 @@ void describe('browser-manager', () => {
       process.env['PUPPETEER_EXECUTABLE_PATH'] = '/puppeteer/chrome/path';
 
       try {
-        const chromePath = findChromePath();
+        const chromePath = getCustomChromePath();
 
         assert.strictEqual(chromePath, '/puppeteer/chrome/path');
       } finally {
