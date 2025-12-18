@@ -1,6 +1,6 @@
 {
   "name": "pptr-mcp",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "MCP server for browser automation via Puppeteer",
   "author": "iatsiuk",
   "repository": {
@@ -12,20 +12,17 @@
     "url": "https://github.com/iatsiuk/pptr-mcp/issues"
   },
   "type": "module",
-  "main": "dist/src/index.js",
+  "main": "dist/index.js",
   "bin": {
-    "pptr-mcp": "dist/src/cli.js"
+    "pptr-mcp": "dist/cli.js"
   },
-  "files": [
-    "dist/src"
-  ],
   "scripts": {
     "prebuild": "npm run format && npm run lint && npm run test",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src/ test/",
     "format": "prettier --write src/ test/",
     "test": "node --import tsx --experimental-test-module-mocks --test --test-concurrency=1 'test/**/*.test.ts' 'test/*.test.ts'",
-    "start": "node dist/src/cli.js"
+    "start": "node dist/cli.js"
   },
   "engines": {
     "node": ">=22"

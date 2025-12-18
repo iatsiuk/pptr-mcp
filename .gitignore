@@ -10,6 +10,8 @@
 !/LICENSE.md
 
 !/.gitignore
+!/.npmignore
+!/tsconfig.build.json
 !/.claude-plugin/
 !/.claude-plugin/**
 !/.mcp.json
