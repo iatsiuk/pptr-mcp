@@ -118,6 +118,7 @@ function createContext(
     Promise,
     URL,
     URLSearchParams,
+    Buffer,
   });
 }
 

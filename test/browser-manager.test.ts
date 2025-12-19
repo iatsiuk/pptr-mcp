@@ -13,6 +13,7 @@ import {
   closePersistentBrowser,
   resetBrowserState,
   saveResultToFile,
+  cleanupOldResults,
 } from '../src/browser-manager.js';
 
 void describe('browser-manager', () => {
@@ -247,6 +248,60 @@ void describe('browser-manager', () => {
       } finally {
         writeFileMock.mock.restore();
         mkdirMock.mock.restore();
+      }
+    });
+  });
+
+  void describe('cleanupOldResults', () => {
+    void it('deletes files older than maxAge', async () => {
+      const now = Date.now();
+      const oldTime = now - 2 * 60 * 60 * 1000; // 2 hours ago
+      const newTime = now - 30 * 60 * 1000; // 30 min ago
+
+      const files = ['old-file.txt', 'new-file.txt'];
+      const readdirMock = mock.method(fs, 'readdir', () =>
+        Promise.resolve(files as unknown as fs.Dirent[])
+      );
+      const statMock = mock.method(fs, 'stat', (filePath: string) => {
+        const isOld = filePath.includes('old-file');
+
+        return Promise.resolve({
+          mtimeMs: isOld ? oldTime : newTime,
+        } as fs.Stats);
+      });
+      const unlinkMock = mock.method(fs, 'unlink', () => Promise.resolve());
+
+      try {
+        await cleanupOldResults(60 * 60 * 1000); // 1 hour maxAge
+
+        assert.strictEqual(readdirMock.mock.callCount(), 1);
+        assert.strictEqual(statMock.mock.callCount(), 2);
+        assert.strictEqual(unlinkMock.mock.callCount(), 1);
+
+        const [unlinkCall] = unlinkMock.mock.calls;
+
+        assert.ok(
+          (unlinkCall?.arguments[0] as string).includes('old-file'),
+          'should delete old file'
+        );
+      } finally {
+        readdirMock.mock.restore();
+        statMock.mock.restore();
+        unlinkMock.mock.restore();
+      }
+    });
+
+    void it('handles missing results directory gracefully', async () => {
+      const readdirMock = mock.method(fs, 'readdir', () =>
+        Promise.reject(new Error('ENOENT'))
+      );
+
+      try {
+        // should not throw
+        await cleanupOldResults();
+        assert.ok(true, 'should handle missing directory');
+      } finally {
+        readdirMock.mock.restore();
       }
     });
   });

@@ -1,8 +1,42 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ensureBrowserInstalled } from './browser-installer.js';
-import { setLaunchArgs } from './browser-manager.js';
+import {
+  setLaunchArgs,
+  closePersistentBrowser,
+  waitForPersistentIdle,
+  cleanupOldResults,
+} from './browser-manager.js';
 import { server, log } from './index.js';
+
+const SHUTDOWN_TIMEOUT_MS = 5_000;
+
+let shuttingDown = false;
+
+async function gracefulShutdown(reason: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  log.info('server', { status: 'shutting-down', reason });
+
+  await Promise.race([
+    (async () => {
+      await waitForPersistentIdle().catch(() => {
+        // ignore - best effort
+      });
+      await closePersistentBrowser().catch(() => {
+        // ignore - best effort
+      });
+    })(),
+    new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+  ]);
+
+  process.exit(0);
+}
+
+process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+process.stdin.on('end', () => void gracefulShutdown('stdin-end'));
 
 async function main() {
   const args = process.argv.slice(2);
@@ -29,6 +63,11 @@ async function main() {
         error: String(err),
       });
     });
+
+  // cleanup old result files (fire-and-forget)
+  cleanupOldResults().catch(() => {
+    // ignore - best effort cleanup
+  });
 }
 
 main().catch((err: unknown) => {

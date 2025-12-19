@@ -218,6 +218,29 @@ void describe('executeCode', () => {
     assert.ok((response as { error: string }).error.includes('string error'));
   });
 
+  void it('provides Buffer global for binary operations', async () => {
+    const code = `
+      const buf = Buffer.from('hello');
+      return {
+        isBuffer: Buffer.isBuffer(buf),
+        length: buf.length,
+        toString: buf.toString()
+      };
+    `;
+    const response = await executeCode(code, browser, 5000);
+
+    assert.strictEqual(response.success, true);
+    const result = (response as { result: unknown }).result as {
+      isBuffer: boolean;
+      length: number;
+      toString: string;
+    };
+
+    assert.strictEqual(result.isBuffer, true);
+    assert.strictEqual(result.length, 5);
+    assert.strictEqual(result.toString, 'hello');
+  });
+
   void it('auto-closes created pages after success', async () => {
     const pagesBefore = (await browser.pages()).length;
     const code = `

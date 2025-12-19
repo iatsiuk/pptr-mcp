@@ -36,7 +36,10 @@ export function ensureBrowserInstalled(): Promise<string> {
     return Promise.resolve(cachedExecutablePath);
   }
 
-  installPromise ??= doEnsureBrowser();
+  installPromise ??= doEnsureBrowser().catch((err: unknown) => {
+    installPromise = null;
+    throw err;
+  });
 
   return installPromise;
 }

@@ -94,6 +94,10 @@ let persistentBrowser: Browser | null = null;
 let launchPromise: Promise<Browser> | null = null;
 let executionLock: Promise<void> = Promise.resolve();
 
+export async function waitForPersistentIdle(): Promise<void> {
+  await executionLock;
+}
+
 export async function withPersistentLock<T>(fn: () => Promise<T>): Promise<T> {
   const previousLock = executionLock;
 
@@ -158,6 +162,26 @@ export async function cleanupProfile(profilePath: string): Promise<void> {
     await fs.rm(profilePath, { recursive: true, force: true });
   } catch {
     // ignore - tmp will be cleaned by OS eventually
+  }
+}
+
+const DEFAULT_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+
+export async function cleanupOldResults(
+  maxAgeMs: number = DEFAULT_MAX_AGE_MS
+): Promise<void> {
+  const files = await fs.readdir(RESULTS_DIR).catch(() => [] as string[]);
+  const now = Date.now();
+
+  for (const file of files) {
+    const filePath = path.join(RESULTS_DIR, file);
+    const stat = await fs.stat(filePath).catch(() => null);
+
+    if (stat && now - stat.mtimeMs > maxAgeMs) {
+      await fs.unlink(filePath).catch(() => {
+        // ignore - best effort cleanup
+      });
+    }
   }
 }
 
