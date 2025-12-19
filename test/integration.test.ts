@@ -27,9 +27,7 @@ function parseResponse(content: unknown[]): ExecutionResponse {
 }
 
 // noop logger for tests - avoids MCP logging noise
-const noop = () => {
-  // intentionally empty
-};
+const noop = () => {};
 const noopLogger = {
   debug: noop,
   info: noop,

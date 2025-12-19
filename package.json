@@ -1,6 +1,6 @@
 {
   "name": "pptr-mcp",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "MCP server for browser automation via Puppeteer",
   "author": "iatsiuk",
   "repository": {

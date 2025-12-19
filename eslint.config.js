@@ -16,6 +16,7 @@ export default [
       },
     },
     rules: {
+      '@typescript-eslint/no-empty-function': 'off',
       'padding-line-between-statements': [
         'error',
         { blankLine: 'always', prev: ['const', 'let', 'var'], next: '*' },

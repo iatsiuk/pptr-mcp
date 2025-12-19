@@ -3,9 +3,7 @@ import assert from 'node:assert';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
-const noop = () => {
-  // intentionally empty
-};
+const noop = () => {};
 const noopLogger = {
   debug: noop,
   info: noop,
@@ -21,9 +19,7 @@ void describe('execute tool install status check', () => {
         getInstallStatus: () => ({ installing: true, progress: 42 }),
         ensureBrowserInstalled: () => Promise.resolve('/path/to/chrome'),
         getCacheDir: () => '/cache',
-        resetInstallerState: () => {
-          // mock - intentionally empty
-        },
+        resetInstallerState: () => {},
       },
     });
 

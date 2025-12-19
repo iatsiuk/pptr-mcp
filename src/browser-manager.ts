@@ -158,6 +158,14 @@ export async function closePersistentBrowser(): Promise<void> {
 }
 
 export async function cleanupProfile(profilePath: string): Promise<void> {
+  // protect user-provided profiles outside managed directory
+  const normalizedPath = path.normalize(profilePath);
+  const normalizedProfilesDir = path.normalize(PROFILES_DIR);
+
+  if (!normalizedPath.startsWith(normalizedProfilesDir + path.sep)) {
+    return;
+  }
+
   try {
     await fs.rm(profilePath, { recursive: true, force: true });
   } catch {

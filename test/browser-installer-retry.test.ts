@@ -36,8 +36,7 @@ void describe('browser-installer retry on failure', () => {
 
     assert.deepStrictEqual(firstResult, { ok: false, error: 'Network error' });
 
-    // KEY BEHAVIOR: without any manual reset, second call should
-    // create a NEW promise and succeed (because promise auto-resets on rejection)
+    // promise auto-resets on rejection, so second call creates new promise
     const secondResult = await ensureBrowserInstalled().then(
       (path) => ({ ok: true, path }),
       (err: unknown) => ({

@@ -1,5 +1,6 @@
 import { describe, it, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -131,14 +132,18 @@ void describe('browser-manager', () => {
     });
 
     void it('creates browser with custom profile path', async () => {
-      const customPath = path.join(os.tmpdir(), 'pptr-mcp-test-profile');
+      const customPath = path.join(
+        os.tmpdir(),
+        `pptr-mcp-test-profile-${crypto.randomUUID()}`
+      );
       const browser = await launchBrowser(customPath);
 
       try {
         assert.ok(browser.connected, 'browser should be connected');
       } finally {
         await browser.close();
-        await cleanupProfile(customPath);
+        // direct cleanup - test profile is outside managed directory
+        await fs.rm(customPath, { recursive: true, force: true });
       }
     });
   });
@@ -248,6 +253,72 @@ void describe('browser-manager', () => {
       } finally {
         writeFileMock.mock.restore();
         mkdirMock.mock.restore();
+      }
+    });
+  });
+
+  void describe('cleanupProfile', () => {
+    void it('does not delete user-provided profile outside managed directory', async () => {
+      const userProfile = path.join(os.tmpdir(), 'other-app', 'profile');
+      const rmMock = mock.method(fs, 'rm', () => Promise.resolve());
+
+      try {
+        await cleanupProfile(userProfile);
+
+        assert.strictEqual(
+          rmMock.mock.callCount(),
+          0,
+          'should not delete user profile'
+        );
+      } finally {
+        rmMock.mock.restore();
+      }
+    });
+
+    void it('deletes profile inside managed directory', async () => {
+      const managedProfile = path.join(
+        os.tmpdir(),
+        'pptr-mcp',
+        'profiles',
+        'test-profile'
+      );
+      const rmMock = mock.method(fs, 'rm', () => Promise.resolve());
+
+      try {
+        await cleanupProfile(managedProfile);
+
+        assert.strictEqual(rmMock.mock.callCount(), 1, 'should delete profile');
+
+        const [rmCall] = rmMock.mock.calls;
+
+        assert.strictEqual(rmCall?.arguments[0], managedProfile);
+      } finally {
+        rmMock.mock.restore();
+      }
+    });
+
+    void it('does not delete path with traversal escaping managed directory', async () => {
+      const traversalPath = path.join(
+        os.tmpdir(),
+        'pptr-mcp',
+        'profiles',
+        'x',
+        '..',
+        '..',
+        'results'
+      );
+      const rmMock = mock.method(fs, 'rm', () => Promise.resolve());
+
+      try {
+        await cleanupProfile(traversalPath);
+
+        assert.strictEqual(
+          rmMock.mock.callCount(),
+          0,
+          'should block traversal paths'
+        );
+      } finally {
+        rmMock.mock.restore();
       }
     });
   });
