@@ -59,7 +59,7 @@ With CLI options:
   "mcpServers": {
     "puppeteer": {
       "command": "npx",
-      "args": ["pptr-mcp", "--no-headless", "--viewport=1920x1080"]
+      "args": ["pptr-mcp", "--no-headless", "--viewport=1080p"]
     }
   }
 }
@@ -85,12 +85,12 @@ With custom Chrome flags (after `--`):
 
 ## CLI Options
 
-| Option           | Description                              |
-| ---------------- | ---------------------------------------- |
-| `--no-headless`  | Run with visible browser window          |
-| `--viewport=WxH` | Set viewport size (e.g., 1920x1080)      |
-| `--help, -h`     | Show help                                |
-| `-- [args]`      | Pass remaining args to Chrome            |
+| Option             | Description                                  |
+| ------------------ | -------------------------------------------- |
+| `--no-headless`    | Run with visible browser window              |
+| `--viewport=VALUE` | Set viewport size (e.g., 1920x1080 or 1080p) |
+| `--help, -h`       | Show help                                    |
+| `-- [args]`        | Pass remaining args to Chrome                |
 
 Unknown options before `--` are also passed to Chrome.
 

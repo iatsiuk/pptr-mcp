@@ -119,4 +119,89 @@ void describe('parseArgs', () => {
       assert.ok(HELP_TEXT.includes('--help'));
     });
   });
+
+  void describe('viewport aliases', () => {
+    void it('parses 4k aliases', () => {
+      const aliases = ['4k', '2160p', 'uhd'];
+      const expected = { width: 3840, height: 2160 };
+
+      for (const alias of aliases) {
+        const options = parseArgs([`--viewport=${alias}`]);
+
+        assert.deepStrictEqual(
+          options.viewport,
+          expected,
+          `--viewport=${alias}`
+        );
+      }
+    });
+
+    void it('parses 1440p aliases', () => {
+      const aliases = ['1440p', 'qhd', '2k'];
+      const expected = { width: 2560, height: 1440 };
+
+      for (const alias of aliases) {
+        const options = parseArgs([`--viewport=${alias}`]);
+
+        assert.deepStrictEqual(
+          options.viewport,
+          expected,
+          `--viewport=${alias}`
+        );
+      }
+    });
+
+    void it('parses 1080p aliases', () => {
+      const aliases = ['1080p', 'fhd'];
+      const expected = { width: 1920, height: 1080 };
+
+      for (const alias of aliases) {
+        const options = parseArgs([`--viewport=${alias}`]);
+
+        assert.deepStrictEqual(
+          options.viewport,
+          expected,
+          `--viewport=${alias}`
+        );
+      }
+    });
+
+    void it('parses 720p aliases', () => {
+      const aliases = ['720p', 'hd'];
+      const expected = { width: 1280, height: 720 };
+
+      for (const alias of aliases) {
+        const options = parseArgs([`--viewport=${alias}`]);
+
+        assert.deepStrictEqual(
+          options.viewport,
+          expected,
+          `--viewport=${alias}`
+        );
+      }
+    });
+
+    void it('parses 480p', () => {
+      const options = parseArgs(['--viewport=480p']);
+
+      assert.deepStrictEqual(options.viewport, { width: 854, height: 480 });
+    });
+
+    void it('is case-insensitive', () => {
+      const cases = ['4K', 'FHD', 'HD', 'QHD', 'UHD'];
+
+      for (const alias of cases) {
+        const options = parseArgs([`--viewport=${alias}`]);
+
+        assert.ok(options.viewport, `--viewport=${alias} should be parsed`);
+      }
+    });
+
+    void it('treats unknown aliases as invalid', () => {
+      const options = parseArgs(['--viewport=8k']);
+
+      assert.strictEqual(options.viewport, undefined);
+      assert.strictEqual(options.viewportRaw, '8k');
+    });
+  });
 });
