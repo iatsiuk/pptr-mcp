@@ -5,7 +5,9 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   closePersistentBrowser,
   resetBrowserState,
+  getProfileDir,
 } from '../src/browser-manager.js';
+import fs from 'node:fs/promises';
 import { createServer } from '../src/index.js';
 
 interface ExecutionResponse {
@@ -56,7 +58,7 @@ void describe('integration', () => {
   void it('executes valid code and returns success', async () => {
     const result = await client.callTool({
       name: 'execute',
-      arguments: { code: 'return 42', persistent: false },
+      arguments: { code: 'return 42', persistent: true },
     });
 
     const response = parseResponse(result.content as unknown[]);
@@ -68,7 +70,7 @@ void describe('integration', () => {
   void it('returns structured error for syntax errors', async () => {
     const result = await client.callTool({
       name: 'execute',
-      arguments: { code: 'return {{{', persistent: false },
+      arguments: { code: 'return {{{', persistent: true },
     });
 
     const response = parseResponse(result.content as unknown[]);
@@ -80,7 +82,7 @@ void describe('integration', () => {
   void it('returns structured error for runtime errors', async () => {
     const result = await client.callTool({
       name: 'execute',
-      arguments: { code: 'throw new Error("test error")', persistent: false },
+      arguments: { code: 'throw new Error("test error")', persistent: true },
     });
 
     const response = parseResponse(result.content as unknown[]);
@@ -91,10 +93,11 @@ void describe('integration', () => {
   });
 
   void it('persistent mode reuses browser', async () => {
+    // use process.pid to verify same browser instance
     const result1 = await client.callTool({
       name: 'execute',
       arguments: {
-        code: 'return browser.wsEndpoint()',
+        code: 'return browser.process()?.pid',
         persistent: true,
       },
     });
@@ -105,7 +108,7 @@ void describe('integration', () => {
     const result2 = await client.callTool({
       name: 'execute',
       arguments: {
-        code: 'return browser.wsEndpoint()',
+        code: 'return browser.process()?.pid',
         persistent: true,
       },
     });
@@ -116,37 +119,7 @@ void describe('integration', () => {
     assert.strictEqual(
       response1.result,
       response2.result,
-      'should reuse same browser'
-    );
-  });
-
-  void it('non-persistent mode uses fresh browser each call', async () => {
-    const result1 = await client.callTool({
-      name: 'execute',
-      arguments: {
-        code: 'return browser.wsEndpoint()',
-        persistent: false,
-      },
-    });
-    const response1 = parseResponse(result1.content as unknown[]);
-
-    assert.strictEqual(response1.success, true);
-
-    const result2 = await client.callTool({
-      name: 'execute',
-      arguments: {
-        code: 'return browser.wsEndpoint()',
-        persistent: false,
-      },
-    });
-    const response2 = parseResponse(result2.content as unknown[]);
-
-    assert.strictEqual(response2.success, true);
-
-    assert.notStrictEqual(
-      response1.result,
-      response2.result,
-      'should use fresh browser'
+      'should reuse same browser (same process ID)'
     );
   });
 
@@ -159,7 +132,7 @@ void describe('integration', () => {
           console.error('error');
           return 'done';
         `,
-        persistent: false,
+        persistent: true,
       },
     });
 
@@ -183,7 +156,7 @@ void describe('integration', () => {
         name: 'execute',
         arguments: {
           code: 'await new Promise(() => {})',
-          persistent: false,
+          persistent: true,
         },
       });
 
@@ -200,45 +173,6 @@ void describe('integration', () => {
     }
   });
 
-  void it('zombie page test: multiple calls with newPage do not leak', async () => {
-    const getPageCount = async () => {
-      const result = await client.callTool({
-        name: 'execute',
-        arguments: {
-          code: 'return (await browser.pages()).length',
-          persistent: true,
-        },
-      });
-      const response = parseResponse(result.content as unknown[]);
-
-      return response.result as number;
-    };
-
-    const initialCount = await getPageCount();
-
-    for (let i = 0; i < 5; i++) {
-      await client.callTool({
-        name: 'execute',
-        arguments: {
-          code: `
-            const page = await browser.newPage();
-            await page.setContent('<h1>Test</h1>');
-            return 'created page';
-          `,
-          persistent: true,
-        },
-      });
-    }
-
-    const finalCount = await getPageCount();
-
-    assert.strictEqual(
-      finalCount,
-      initialCount,
-      'page count should not increase'
-    );
-  });
-
   void it('handles circular object serialization', async () => {
     const result = await client.callTool({
       name: 'execute',
@@ -248,7 +182,7 @@ void describe('integration', () => {
           obj.self = obj;
           return obj;
         `,
-        persistent: false,
+        persistent: true,
       },
     });
 
@@ -301,6 +235,174 @@ void describe('integration', () => {
       executionOrder,
       [1, 2, 3],
       'calls should execute in launch order due to mutex'
+    );
+  });
+
+  void it('persistent=true shares cookies between calls', async () => {
+    // set cookie
+    const setResult = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('https://example.com');
+          await page.evaluate(() => document.cookie = 'persistTest=hello; path=/');
+          return 'set';
+        `,
+        persistent: true,
+      },
+    });
+
+    assert.strictEqual(
+      parseResponse(setResult.content as unknown[]).success,
+      true
+    );
+
+    // read cookie in second call
+    const getResult = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('https://example.com');
+          return await page.evaluate(() => document.cookie);
+        `,
+        persistent: true,
+      },
+    });
+    const getResponse = parseResponse(getResult.content as unknown[]);
+
+    assert.strictEqual(getResponse.success, true);
+    assert.ok(
+      (getResponse.result as string).includes('persistTest=hello'),
+      'cookies should persist in persistent mode'
+    );
+  });
+
+  void it('isolated mode (persistent=false) uses fresh browser each call', async () => {
+    const result1 = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: 'return browser.process()?.pid',
+        persistent: false,
+      },
+    });
+    const response1 = parseResponse(result1.content as unknown[]);
+
+    assert.strictEqual(response1.success, true);
+
+    const result2 = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: 'return browser.process()?.pid',
+        persistent: false,
+      },
+    });
+    const response2 = parseResponse(result2.content as unknown[]);
+
+    assert.strictEqual(response2.success, true);
+
+    assert.notStrictEqual(
+      response1.result,
+      response2.result,
+      'isolated mode should use different browser instances (different PIDs)'
+    );
+  });
+
+  void it('isolated mode does not share cookies with persistent mode', async () => {
+    // set cookie in persistent mode
+    const setResult = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('https://example.com');
+          await page.evaluate(() => document.cookie = 'sharedTest=persistent; path=/');
+          return 'set';
+        `,
+        persistent: true,
+      },
+    });
+
+    assert.strictEqual(
+      parseResponse(setResult.content as unknown[]).success,
+      true
+    );
+
+    // read cookie in isolated mode - should NOT see persistent cookie
+    const getResult = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('https://example.com');
+          return await page.evaluate(() => document.cookie);
+        `,
+        persistent: false,
+      },
+    });
+    const getResponse = parseResponse(getResult.content as unknown[]);
+
+    assert.strictEqual(getResponse.success, true);
+    assert.ok(
+      !(getResponse.result as string).includes('sharedTest=persistent'),
+      'isolated mode should not see persistent mode cookies'
+    );
+  });
+
+  void it('persistent mode preserves cookies across browser relaunch', async () => {
+    // clean profile before test
+    const profileDir = await getProfileDir();
+
+    await fs.rm(profileDir, { recursive: true, force: true });
+
+    // close any existing persistent browser
+    await closePersistentBrowser();
+
+    // set persistent cookie (with expires) in persistent browser
+    const setResult = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('https://example.com');
+          // set cookie with expiration (session cookies are not persisted to disk)
+          const expires = new Date(Date.now() + 86400000).toUTCString();
+          await page.evaluate((exp) => {
+            document.cookie = 'test=relaunch; path=/; expires=' + exp;
+          }, expires);
+          return 'cookie set';
+        `,
+        persistent: true,
+      },
+    });
+
+    assert.strictEqual(
+      parseResponse(setResult.content as unknown[]).success,
+      true
+    );
+
+    // close browser to simulate relaunch
+    await closePersistentBrowser();
+
+    // read cookie after relaunch
+    const getResult = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('https://example.com');
+          return await page.evaluate(() => document.cookie);
+        `,
+        persistent: true,
+      },
+    });
+    const getResponse = parseResponse(getResult.content as unknown[]);
+
+    assert.strictEqual(getResponse.success, true);
+    assert.ok(
+      (getResponse.result as string).includes('test=relaunch'),
+      'cookie should persist after browser relaunch'
     );
   });
 });

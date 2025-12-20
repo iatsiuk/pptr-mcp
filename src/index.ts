@@ -7,10 +7,9 @@ import { getInstallStatus } from './browser-installer.js';
 import {
   getPersistentBrowser,
   launchBrowser,
-  getProfilePath,
-  cleanupProfile,
   createErrorResponse,
   withPersistentLock,
+  getLaunchErrorSuggestion,
 } from './browser-manager.js';
 import { createLogger, type Logger } from './logger.js';
 import { executeDescription } from './tool-descriptions.js';
@@ -67,25 +66,27 @@ export function createServer(logger?: Logger): ServerWithLogger {
         };
       }
 
-      const profilePath = getProfilePath(persistent);
       const timeout = parseInt(
         process.env['PPTR_MCP_TIMEOUT'] ?? String(DEFAULT_TIMEOUT),
         10
       );
 
-      log.info('execute', { codeLength: code.length, persistent, profilePath });
+      log.info('execute', {
+        codeLength: code.length,
+        mode: persistent ? 'persistent' : 'isolated',
+      });
 
       let browser: Browser;
 
       try {
         browser = persistent
           ? await getPersistentBrowser()
-          : await launchBrowser(profilePath);
+          : await launchBrowser();
       } catch (err) {
         const response = createErrorResponse(
           'launch',
           err instanceof Error ? err.message : String(err),
-          'Check Chrome installation or set CHROME_PATH'
+          getLaunchErrorSuggestion(err)
         );
 
         return {
@@ -94,8 +95,9 @@ export function createServer(logger?: Logger): ServerWithLogger {
         };
       }
 
+      const execute = () => executeCode(code, browser, timeout);
+
       try {
-        const execute = () => executeCode(code, browser, timeout);
         const response = persistent
           ? await withPersistentLock(execute)
           : await execute();
@@ -106,10 +108,9 @@ export function createServer(logger?: Logger): ServerWithLogger {
         };
       } finally {
         if (!persistent) {
-          await browser.close().catch((err: unknown) => {
-            log.warning('closeBrowser', { error: String(err) });
+          await browser.close().catch(() => {
+            // ignore close errors for isolated browser
           });
-          await cleanupProfile(profilePath);
         }
       }
     }

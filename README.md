@@ -52,7 +52,20 @@ Add to your MCP client config (e.g., Claude Desktop):
 }
 ```
 
-With custom Chrome flags:
+With CLI options:
+
+```json
+{
+  "mcpServers": {
+    "puppeteer": {
+      "command": "npx",
+      "args": ["pptr-mcp", "--no-headless", "--viewport=1920x1080"]
+    }
+  }
+}
+```
+
+With custom Chrome flags (after `--`):
 
 ```json
 {
@@ -61,13 +74,25 @@ With custom Chrome flags:
       "command": "npx",
       "args": [
         "pptr-mcp",
-        "--window-size=1920,1080",
+        "--viewport=1280x720",
+        "--",
         "--proxy-server=http://proxy:8080"
       ]
     }
   }
 }
 ```
+
+## CLI Options
+
+| Option           | Description                              |
+| ---------------- | ---------------------------------------- |
+| `--no-headless`  | Run with visible browser window          |
+| `--viewport=WxH` | Set viewport size (e.g., 1920x1080)      |
+| `--help, -h`     | Show help                                |
+| `-- [args]`      | Pass remaining args to Chrome            |
+
+Unknown options before `--` are also passed to Chrome.
 
 ## Claude Code Plugin
 
@@ -84,6 +109,7 @@ Install as a Claude Code plugin:
 | --------------------------- | ---------------------------------------- |
 | `CHROME_PATH`               | Path to Chrome executable                |
 | `PUPPETEER_EXECUTABLE_PATH` | Alternative to CHROME_PATH               |
+| `PUPPETEER_CACHE_DIR`       | Browser download cache directory         |
 | `PPTR_MCP_TIMEOUT`          | Execution timeout in ms (default: 30000) |
 
 ## Tool: execute

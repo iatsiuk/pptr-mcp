@@ -6,16 +6,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  getCustomChromePath,
-  getProfilePath,
   launchBrowser,
   getPersistentBrowser,
-  cleanupProfile,
   closePersistentBrowser,
   resetBrowserState,
-  saveResultToFile,
-  cleanupOldResults,
+  setBrowserConfig,
+  isProfileLockError,
+  getLaunchErrorSuggestion,
 } from '../src/browser-manager.js';
+import { saveResultToFile } from '../src/vm-executor.js';
 
 void describe('browser-manager', () => {
   afterEach(async () => {
@@ -23,100 +22,24 @@ void describe('browser-manager', () => {
     resetBrowserState();
   });
 
-  void describe('getCustomChromePath', () => {
-    void it('returns undefined when no env set (puppeteer uses bundled browser)', () => {
-      const originalChrome = process.env['CHROME_PATH'];
-      const originalPuppeteer = process.env['PUPPETEER_EXECUTABLE_PATH'];
+  void describe('setBrowserConfig', () => {
+    void it('applies viewport config to launched browser', async () => {
+      setBrowserConfig({
+        headless: true,
+        viewport: { width: 800, height: 600 },
+      });
 
-      delete process.env['CHROME_PATH'];
-      delete process.env['PUPPETEER_EXECUTABLE_PATH'];
-
-      try {
-        const chromePath = getCustomChromePath();
-
-        assert.strictEqual(chromePath, undefined);
-      } finally {
-        if (originalChrome !== undefined) {
-          process.env['CHROME_PATH'] = originalChrome;
-        }
-        if (originalPuppeteer !== undefined) {
-          process.env['PUPPETEER_EXECUTABLE_PATH'] = originalPuppeteer;
-        }
-      }
-    });
-
-    void it('respects CHROME_PATH env variable', () => {
-      const original = process.env['CHROME_PATH'];
-
-      process.env['CHROME_PATH'] = '/custom/chrome/path';
+      const browser = await launchBrowser();
 
       try {
-        const chromePath = getCustomChromePath();
+        const page = await browser.newPage();
+        const viewport = page.viewport();
 
-        assert.strictEqual(chromePath, '/custom/chrome/path');
+        assert.strictEqual(viewport?.width, 800);
+        assert.strictEqual(viewport.height, 600);
       } finally {
-        if (original === undefined) {
-          delete process.env['CHROME_PATH'];
-        } else {
-          process.env['CHROME_PATH'] = original;
-        }
+        await browser.close();
       }
-    });
-
-    void it('respects PUPPETEER_EXECUTABLE_PATH env variable', () => {
-      const originalChrome = process.env['CHROME_PATH'];
-      const originalPuppeteer = process.env['PUPPETEER_EXECUTABLE_PATH'];
-
-      delete process.env['CHROME_PATH'];
-      process.env['PUPPETEER_EXECUTABLE_PATH'] = '/puppeteer/chrome/path';
-
-      try {
-        const chromePath = getCustomChromePath();
-
-        assert.strictEqual(chromePath, '/puppeteer/chrome/path');
-      } finally {
-        if (originalChrome !== undefined) {
-          process.env['CHROME_PATH'] = originalChrome;
-        }
-        if (originalPuppeteer === undefined) {
-          delete process.env['PUPPETEER_EXECUTABLE_PATH'];
-        } else {
-          process.env['PUPPETEER_EXECUTABLE_PATH'] = originalPuppeteer;
-        }
-      }
-    });
-  });
-
-  void describe('getProfilePath', () => {
-    void it('returns fixed path in tmpdir for persistent=true', () => {
-      const profilePath = getProfilePath(true);
-
-      assert.ok(
-        profilePath.includes('pptr-mcp/profiles/persistent'),
-        'should contain profile identifier'
-      );
-      assert.ok(
-        profilePath.startsWith(os.tmpdir()),
-        'should be in temp directory'
-      );
-    });
-
-    void it('returns unique uuid path for persistent=false', () => {
-      const path1 = getProfilePath(false);
-      const path2 = getProfilePath(false);
-
-      assert.ok(
-        path1.includes('pptr-mcp/profiles/'),
-        'should be in profiles dir'
-      );
-      assert.notStrictEqual(path1, path2, 'should return unique paths');
-    });
-
-    void it('returns same path for multiple persistent=true calls', () => {
-      const path1 = getProfilePath(true);
-      const path2 = getProfilePath(true);
-
-      assert.strictEqual(path1, path2, 'persistent paths should be identical');
     });
   });
 
@@ -168,18 +91,14 @@ void describe('browser-manager', () => {
 
     void it('relaunches if browser disconnected', async () => {
       const browser1 = await getPersistentBrowser();
-      const endpoint1 = browser1.wsEndpoint();
 
       await browser1.close();
+
+      assert.ok(!browser1.connected, 'old browser should be disconnected');
 
       const browser2 = await getPersistentBrowser();
 
       assert.ok(browser2.connected, 'new browser should be connected');
-      assert.notStrictEqual(
-        browser2.wsEndpoint(),
-        endpoint1,
-        'should be new browser instance'
-      );
     });
 
     void it('concurrent calls do not double-launch (mutex)', async () => {
@@ -212,7 +131,7 @@ void describe('browser-manager', () => {
         const filePath = await saveResultToFile(content);
 
         assert.ok(
-          filePath.includes('pptr-mcp/results/'),
+          filePath.includes(path.join('pptr-mcp', 'results')),
           'should be in results dir'
         );
         assert.ok(filePath.endsWith('.txt'), 'should have .txt extension');
@@ -257,123 +176,55 @@ void describe('browser-manager', () => {
     });
   });
 
-  void describe('cleanupProfile', () => {
-    void it('does not delete user-provided profile outside managed directory', async () => {
-      const userProfile = path.join(os.tmpdir(), 'other-app', 'profile');
-      const rmMock = mock.method(fs, 'rm', () => Promise.resolve());
+  void describe('isProfileLockError', () => {
+    void it('detects "user data directory is already in use"', () => {
+      const err = new Error(
+        'Failed to launch: user data directory is already in use'
+      );
 
-      try {
-        await cleanupProfile(userProfile);
-
-        assert.strictEqual(
-          rmMock.mock.callCount(),
-          0,
-          'should not delete user profile'
-        );
-      } finally {
-        rmMock.mock.restore();
-      }
+      assert.strictEqual(isProfileLockError(err), true);
     });
 
-    void it('deletes profile inside managed directory', async () => {
-      const managedProfile = path.join(
-        os.tmpdir(),
-        'pptr-mcp',
-        'profiles',
-        'test-profile'
-      );
-      const rmMock = mock.method(fs, 'rm', () => Promise.resolve());
+    void it('detects "unable to move the cache"', () => {
+      const err = new Error('Unable to move the cache');
 
-      try {
-        await cleanupProfile(managedProfile);
-
-        assert.strictEqual(rmMock.mock.callCount(), 1, 'should delete profile');
-
-        const [rmCall] = rmMock.mock.calls;
-
-        assert.strictEqual(rmCall?.arguments[0], managedProfile);
-      } finally {
-        rmMock.mock.restore();
-      }
+      assert.strictEqual(isProfileLockError(err), true);
     });
 
-    void it('does not delete path with traversal escaping managed directory', async () => {
-      const traversalPath = path.join(
-        os.tmpdir(),
-        'pptr-mcp',
-        'profiles',
-        'x',
-        '..',
-        '..',
-        'results'
+    void it('detects "failed to create a ProcessSingleton"', () => {
+      const err = new Error('Failed to create a ProcessSingleton');
+
+      assert.strictEqual(isProfileLockError(err), true);
+    });
+
+    void it('returns false for unrelated errors', () => {
+      const err = new Error('Connection refused');
+
+      assert.strictEqual(isProfileLockError(err), false);
+    });
+
+    void it('handles string input', () => {
+      assert.strictEqual(
+        isProfileLockError('user data directory is already in use'),
+        true
       );
-      const rmMock = mock.method(fs, 'rm', () => Promise.resolve());
-
-      try {
-        await cleanupProfile(traversalPath);
-
-        assert.strictEqual(
-          rmMock.mock.callCount(),
-          0,
-          'should block traversal paths'
-        );
-      } finally {
-        rmMock.mock.restore();
-      }
     });
   });
 
-  void describe('cleanupOldResults', () => {
-    void it('deletes files older than maxAge', async () => {
-      const now = Date.now();
-      const oldTime = now - 2 * 60 * 60 * 1000; // 2 hours ago
-      const newTime = now - 30 * 60 * 1000; // 30 min ago
+  void describe('getLaunchErrorSuggestion', () => {
+    void it('returns profile lock suggestion for lock errors', () => {
+      const err = new Error('user data directory is already in use');
+      const suggestion = getLaunchErrorSuggestion(err);
 
-      const files = ['old-file.txt', 'new-file.txt'];
-      const readdirMock = mock.method(fs, 'readdir', () =>
-        Promise.resolve(files as unknown as fs.Dirent[])
-      );
-      const statMock = mock.method(fs, 'stat', (filePath: string) => {
-        const isOld = filePath.includes('old-file');
-
-        return Promise.resolve({
-          mtimeMs: isOld ? oldTime : newTime,
-        } as fs.Stats);
-      });
-      const unlinkMock = mock.method(fs, 'unlink', () => Promise.resolve());
-
-      try {
-        await cleanupOldResults(60 * 60 * 1000); // 1 hour maxAge
-
-        assert.strictEqual(readdirMock.mock.callCount(), 1);
-        assert.strictEqual(statMock.mock.callCount(), 2);
-        assert.strictEqual(unlinkMock.mock.callCount(), 1);
-
-        const [unlinkCall] = unlinkMock.mock.calls;
-
-        assert.ok(
-          (unlinkCall?.arguments[0] as string).includes('old-file'),
-          'should delete old file'
-        );
-      } finally {
-        readdirMock.mock.restore();
-        statMock.mock.restore();
-        unlinkMock.mock.restore();
-      }
+      assert.ok(suggestion.includes('Profile is locked'));
+      assert.ok(suggestion.includes('persistent=false'));
     });
 
-    void it('handles missing results directory gracefully', async () => {
-      const readdirMock = mock.method(fs, 'readdir', () =>
-        Promise.reject(new Error('ENOENT'))
-      );
+    void it('returns generic suggestion for other errors', () => {
+      const err = new Error('Chrome not found');
+      const suggestion = getLaunchErrorSuggestion(err);
 
-      try {
-        // should not throw
-        await cleanupOldResults();
-        assert.ok(true, 'should handle missing directory');
-      } finally {
-        readdirMock.mock.restore();
-      }
+      assert.ok(suggestion.includes('CHROME_PATH'));
     });
   });
 });

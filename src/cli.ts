@@ -2,11 +2,11 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ensureBrowserInstalled } from './browser-installer.js';
 import {
-  setLaunchArgs,
+  setBrowserConfig,
   closePersistentBrowser,
   waitForPersistentIdle,
-  cleanupOldResults,
 } from './browser-manager.js';
+import { parseArgs, HELP_TEXT } from './cli-args.js';
 import { server, log } from './index.js';
 
 const SHUTDOWN_TIMEOUT_MS = 5_000;
@@ -39,17 +39,31 @@ process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
 process.stdin.on('end', () => void gracefulShutdown('stdin-end'));
 
 async function main() {
-  const args = process.argv.slice(2);
+  const options = parseArgs(process.argv.slice(2));
 
-  if (args.length > 0) {
-    setLaunchArgs(args);
+  if (options.help) {
+    console.log(HELP_TEXT);
+    process.exit(0);
   }
+
+  if (options.viewportRaw && !options.viewport) {
+    console.error(
+      `warning: invalid viewport format "${options.viewportRaw}", expected WxH (e.g., 1920x1080)`
+    );
+  }
+
+  setBrowserConfig(options);
 
   const transport = new StdioServerTransport();
 
   await server.connect(transport);
 
-  log.info('server', { status: 'started', chromeArgs: args });
+  log.info('server', {
+    status: 'started',
+    headless: options.headless,
+    viewport: options.viewport,
+    chromeArgs: options.chromeArgs,
+  });
 
   // start browser installation in background (fire-and-forget)
   log.info('browser', { status: 'checking' });
@@ -63,11 +77,6 @@ async function main() {
         error: String(err),
       });
     });
-
-  // cleanup old result files (fire-and-forget)
-  cleanupOldResults().catch(() => {
-    // ignore - best effort cleanup
-  });
 }
 
 main().catch((err: unknown) => {

@@ -1,10 +1,15 @@
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { Browser } from 'puppeteer-core';
 
-import { executeCode, safeSerialize } from '../src/vm-executor.js';
-import { launchBrowser, MAX_RESULT_LENGTH } from '../src/browser-manager.js';
+import {
+  executeCode,
+  safeSerialize,
+  MAX_RESULT_LENGTH,
+} from '../src/vm-executor.js';
+import { launchBrowser } from '../src/browser-manager.js';
 
 void describe('safeSerialize', () => {
   void it('converts circular objects to string representation', () => {
@@ -241,43 +246,38 @@ void describe('executeCode', () => {
     assert.strictEqual(result.toString, 'hello');
   });
 
-  void it('auto-closes created pages after success', async () => {
-    const pagesBefore = (await browser.pages()).length;
+  void it('provides URL and URLSearchParams globals', async () => {
     const code = `
-      await browser.newPage();
-      await browser.newPage();
-      return 'done';
+      const url = new URL('https://example.com/path?foo=bar');
+      url.searchParams.set('baz', 'qux');
+      const params = new URLSearchParams('a=1&b=2');
+      return {
+        href: url.href,
+        host: url.host,
+        fooParam: url.searchParams.get('foo'),
+        bazParam: url.searchParams.get('baz'),
+        paramsA: params.get('a'),
+        paramsB: params.get('b')
+      };
     `;
-    const response = await executeCode(code, browser, 10000);
+    const response = await executeCode(code, browser, 5000);
 
     assert.strictEqual(response.success, true);
+    const result = (response as { result: unknown }).result as {
+      href: string;
+      host: string;
+      fooParam: string;
+      bazParam: string;
+      paramsA: string;
+      paramsB: string;
+    };
 
-    const pagesAfter = (await browser.pages()).length;
-
-    assert.strictEqual(
-      pagesAfter,
-      pagesBefore,
-      'created pages should be closed'
-    );
-  });
-
-  void it('auto-closes created pages after error', async () => {
-    const pagesBefore = (await browser.pages()).length;
-    const code = `
-      await browser.newPage();
-      throw new Error('intentional error');
-    `;
-    const response = await executeCode(code, browser, 10000);
-
-    assert.strictEqual(response.success, false);
-
-    const pagesAfter = (await browser.pages()).length;
-
-    assert.strictEqual(
-      pagesAfter,
-      pagesBefore,
-      'created pages should be closed even on error'
-    );
+    assert.strictEqual(result.href, 'https://example.com/path?foo=bar&baz=qux');
+    assert.strictEqual(result.host, 'example.com');
+    assert.strictEqual(result.fooParam, 'bar');
+    assert.strictEqual(result.bazParam, 'qux');
+    assert.strictEqual(result.paramsA, '1');
+    assert.strictEqual(result.paramsB, '2');
   });
 
   void it('saves large result to file', async () => {
@@ -300,7 +300,7 @@ void describe('executeCode', () => {
         'result should indicate file save'
       );
       assert.ok(
-        resultStr.includes('pptr-mcp/results/'),
+        resultStr.includes(path.join('pptr-mcp', 'results')),
         'result should contain path'
       );
 
@@ -313,7 +313,7 @@ void describe('executeCode', () => {
         string,
       ];
 
-      assert.ok(writtenPath.includes('pptr-mcp/results/'));
+      assert.ok(writtenPath.includes(path.join('pptr-mcp', 'results')));
       assert.ok(writtenPath.endsWith('.txt'));
       assert.ok(writtenContent.length > MAX_RESULT_LENGTH);
     } finally {

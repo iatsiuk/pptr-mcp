@@ -1,93 +1,70 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer-core';
 import { ensureBrowserInstalled } from './browser-installer.js';
+import { type ErrorType, type ExecutionError } from './vm-executor.js';
 
-const BASE_DIR = path.join(os.tmpdir(), 'pptr-mcp');
-const PROFILES_DIR = path.join(BASE_DIR, 'profiles');
-const RESULTS_DIR = path.join(BASE_DIR, 'results');
-
-export const MAX_RESULT_LENGTH = 100_000;
-
-export type ErrorType =
-  | 'syntax'
-  | 'runtime'
-  | 'timeout'
-  | 'launch'
-  | 'serialization';
-
-export interface LogEntry {
-  level: 'log' | 'error' | 'warn' | 'info';
-  args: unknown[];
-}
-
-export interface ExecutionError {
-  success: false;
-  error: string;
-  details: {
-    type: ErrorType;
-    stack?: string;
-    line?: number;
-    column?: number;
-    suggestion?: string;
-  };
-  logs: LogEntry[];
-}
+const PROFILE_DIR = path.join(os.homedir(), '.cache', 'pptr-mcp', 'profile');
 
 export function getCustomChromePath(): string | undefined {
   return process.env['CHROME_PATH'] ?? process.env['PUPPETEER_EXECUTABLE_PATH'];
 }
 
-const persistentProfilePath = path.join(PROFILES_DIR, 'persistent');
-
-export function getProfilePath(persistent: boolean): string {
-  if (persistent) {
-    return persistentProfilePath;
-  }
-  return path.join(PROFILES_DIR, crypto.randomUUID());
-}
-
-export async function saveResultToFile(content: string): Promise<string> {
-  await fs.mkdir(RESULTS_DIR, { recursive: true });
-  const filePath = path.join(RESULTS_DIR, `${crypto.randomUUID()}.txt`);
-
-  await fs.writeFile(filePath, content, 'utf-8');
-
-  return filePath;
+export async function getProfileDir(): Promise<string> {
+  await fs.mkdir(PROFILE_DIR, { recursive: true });
+  return PROFILE_DIR;
 }
 
 const DEFAULT_ARGS = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
   '--disable-dev-shm-usage',
-  '--disable-gpu',
-  '--disable-extensions',
   '--disable-background-networking',
+  '--hide-crash-restore-bubble',
 ];
 
-let customArgs: string[] = [];
+const HEADLESS_ARGS = ['--screen-info={3840x2160}'];
 
-export function setLaunchArgs(args: string[]): void {
-  customArgs = args;
+export interface BrowserConfig {
+  headless: boolean;
+  viewport?: { width: number; height: number };
+  chromeArgs: string[];
+}
+
+let config: BrowserConfig = {
+  headless: true,
+  chromeArgs: [],
+};
+
+export function setBrowserConfig(newConfig: Partial<BrowserConfig>): void {
+  config = { headless: true, chromeArgs: [], ...newConfig };
 }
 
 export async function launchBrowser(profilePath?: string): Promise<Browser> {
   const executablePath =
     getCustomChromePath() ?? (await ensureBrowserInstalled());
 
-  const options: Parameters<typeof puppeteer.launch>[0] = {
-    headless: true,
-    args: [...DEFAULT_ARGS, ...customArgs],
-    executablePath,
-  };
+  const args = [...DEFAULT_ARGS, ...config.chromeArgs];
 
-  if (profilePath) {
-    options.userDataDir = profilePath;
+  if (config.headless) {
+    args.push(...HEADLESS_ARGS);
   }
 
-  return puppeteer.launch(options);
+  if (!config.headless && config.viewport) {
+    args.push(
+      `--window-size=${String(config.viewport.width)},${String(config.viewport.height)}`
+    );
+  }
+
+  return puppeteer.launch({
+    headless: config.headless,
+    args,
+    executablePath,
+    defaultViewport: config.viewport ?? null,
+    pipe: true,
+    ...(profilePath && { userDataDir: profilePath }),
+  });
 }
 
 let persistentBrowser: Browser | null = null;
@@ -100,21 +77,15 @@ export async function waitForPersistentIdle(): Promise<void> {
 
 export async function withPersistentLock<T>(fn: () => Promise<T>): Promise<T> {
   const previousLock = executionLock;
+  const { promise, resolve } = Promise.withResolvers<undefined>();
 
-  let release: () => void = () => {
-    // will be replaced by Promise resolve
-  };
-
-  executionLock = new Promise((resolve) => {
-    release = resolve;
-  });
-
+  executionLock = promise;
   await previousLock;
 
   try {
     return await fn();
   } finally {
-    release();
+    resolve(undefined);
   }
 }
 
@@ -127,7 +98,13 @@ export async function getPersistentBrowser(): Promise<Browser> {
     return launchPromise;
   }
 
-  launchPromise = launchBrowser(persistentProfilePath);
+  // wrap in async IIFE to capture promise synchronously before any await
+  launchPromise = (async () => {
+    const profileDir = await getProfileDir();
+
+    return launchBrowser(profileDir);
+  })();
+
   try {
     persistentBrowser = await launchPromise;
     persistentBrowser.on('disconnected', () => {
@@ -157,46 +134,31 @@ export async function closePersistentBrowser(): Promise<void> {
   launchPromise = null;
 }
 
-export async function cleanupProfile(profilePath: string): Promise<void> {
-  // protect user-provided profiles outside managed directory
-  const normalizedPath = path.normalize(profilePath);
-  const normalizedProfilesDir = path.normalize(PROFILES_DIR);
-
-  if (!normalizedPath.startsWith(normalizedProfilesDir + path.sep)) {
-    return;
-  }
-
-  try {
-    await fs.rm(profilePath, { recursive: true, force: true });
-  } catch {
-    // ignore - tmp will be cleaned by OS eventually
-  }
-}
-
-const DEFAULT_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
-
-export async function cleanupOldResults(
-  maxAgeMs: number = DEFAULT_MAX_AGE_MS
-): Promise<void> {
-  const files = await fs.readdir(RESULTS_DIR).catch(() => [] as string[]);
-  const now = Date.now();
-
-  for (const file of files) {
-    const filePath = path.join(RESULTS_DIR, file);
-    const stat = await fs.stat(filePath).catch(() => null);
-
-    if (stat && now - stat.mtimeMs > maxAgeMs) {
-      await fs.unlink(filePath).catch(() => {
-        // ignore - best effort cleanup
-      });
-    }
-  }
-}
-
 export function resetBrowserState(): void {
   persistentBrowser = null;
   launchPromise = null;
   executionLock = Promise.resolve();
+  config = { headless: true, chromeArgs: [] };
+}
+
+export function isProfileLockError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lowerMessage = message.toLowerCase();
+
+  return (
+    lowerMessage.includes('user data directory is already in use') ||
+    lowerMessage.includes('unable to move the cache') ||
+    lowerMessage.includes('failed to create a processsingleton') ||
+    (lowerMessage.includes('lock') && lowerMessage.includes('profile'))
+  );
+}
+
+export function getLaunchErrorSuggestion(error: unknown): string {
+  if (isProfileLockError(error)) {
+    return `Profile is locked by another process. Close other pptr-mcp instances or use persistent=false for isolated sessions. Profile location: ${PROFILE_DIR}`;
+  }
+
+  return 'Check Chrome installation or set CHROME_PATH';
 }
 
 export function createErrorResponse(
@@ -204,16 +166,10 @@ export function createErrorResponse(
   error: string,
   suggestion?: string
 ): ExecutionError {
-  const details: ExecutionError['details'] = { type };
-
-  if (suggestion) {
-    details.suggestion = suggestion;
-  }
-
   return {
     success: false,
     error,
-    details,
+    details: { type, ...(suggestion && { suggestion }) },
     logs: [],
   };
 }

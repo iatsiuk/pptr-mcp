@@ -1,15 +1,39 @@
-import vm from 'node:vm';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { inspect } from 'node:util';
-import type { Browser, BrowserContext, Page } from 'puppeteer-core';
-import {
-  type LogEntry,
-  type ErrorType,
-  type ExecutionError,
-  MAX_RESULT_LENGTH,
-  saveResultToFile,
-} from './browser-manager.js';
+import vm from 'node:vm';
+import type { Browser } from 'puppeteer-core';
 
-export type { LogEntry };
+const RESULTS_DIR = path.join(os.tmpdir(), 'pptr-mcp', 'results');
+
+export const MAX_RESULT_LENGTH = 100_000;
+
+export type ErrorType =
+  | 'syntax'
+  | 'runtime'
+  | 'timeout'
+  | 'launch'
+  | 'serialization';
+
+export interface LogEntry {
+  level: 'log' | 'error' | 'warn' | 'info';
+  args: unknown[];
+}
+
+export interface ExecutionError {
+  success: false;
+  error: string;
+  details: {
+    type: ErrorType;
+    stack?: string;
+    line?: number;
+    column?: number;
+    suggestion?: string;
+  };
+  logs: LogEntry[];
+}
 
 export interface ExecutionResult {
   success: true;
@@ -18,6 +42,15 @@ export interface ExecutionResult {
 }
 
 export type ExecutionResponse = ExecutionResult | ExecutionError;
+
+export async function saveResultToFile(content: string): Promise<string> {
+  await fs.mkdir(RESULTS_DIR, { recursive: true });
+  const filePath = path.join(RESULTS_DIR, `${crypto.randomUUID()}.txt`);
+
+  await fs.writeFile(filePath, content, 'utf-8');
+
+  return filePath;
+}
 
 const MAX_LOGS = 1000;
 const SYNC_TIMEOUT = 5000;
@@ -41,7 +74,7 @@ export function safeSerialize(value: unknown): unknown {
 type VmConsole = Pick<Console, 'log' | 'error' | 'warn' | 'info'>;
 
 function createConsole(logs: LogEntry[]): VmConsole {
-  const pushLog = (level: LogEntry['level'], args: unknown[]) => {
+  const pushLog = (level: LogEntry['level'], ...args: unknown[]) => {
     if (logs.length < MAX_LOGS) {
       logs.push({ level, args: args.map(safeSerialize) });
     } else if (logs.length === MAX_LOGS) {
@@ -49,20 +82,14 @@ function createConsole(logs: LogEntry[]): VmConsole {
     }
   };
 
-  return {
-    log: (...args: unknown[]) => {
-      pushLog('log', args);
-    },
-    error: (...args: unknown[]) => {
-      pushLog('error', args);
-    },
-    warn: (...args: unknown[]) => {
-      pushLog('warn', args);
-    },
-    info: (...args: unknown[]) => {
-      pushLog('info', args);
-    },
-  };
+  return Object.fromEntries(
+    (['log', 'error', 'warn', 'info'] as const).map((level) => [
+      level,
+      (...args: unknown[]) => {
+        pushLog(level, ...args);
+      },
+    ])
+  ) as VmConsole;
 }
 
 export function wrapUserCode(code: string): string {
@@ -124,12 +151,11 @@ function createContext(
 
 function isErrorLike(
   e: unknown
-): e is { message: string; code?: string; name?: string } {
+): e is { message: string; code?: string; name?: string; stack?: string } {
   return (
     typeof e === 'object' &&
     e !== null &&
-    'message' in e &&
-    typeof (e as { message: unknown }).message === 'string'
+    typeof (e as Error).message === 'string'
   );
 }
 
@@ -197,38 +223,11 @@ export async function executeCode(
   const logs: LogEntry[] = [];
   const timers = new Set<NodeJS.Timeout>();
 
-  const pagesBefore = new Set<Page>(await browser.pages());
-  const contextsBefore = new Set<BrowserContext>(browser.browserContexts());
-
-  let cleaned = false;
-  const cleanup = async () => {
-    if (cleaned) return;
-    cleaned = true;
-
+  const cleanup = () => {
     for (const id of timers) {
       clearTimeout(id);
     }
     timers.clear();
-
-    const pagesAfter = await browser.pages();
-
-    for (const page of pagesAfter) {
-      if (!pagesBefore.has(page)) {
-        await page.close().catch(() => {
-          // ignore close errors
-        });
-      }
-    }
-
-    const contextsAfter = browser.browserContexts();
-
-    for (const ctx of contextsAfter) {
-      if (!contextsBefore.has(ctx)) {
-        await ctx.close().catch(() => {
-          // ignore close errors
-        });
-      }
-    }
   };
 
   try {
@@ -279,12 +278,6 @@ export async function executeCode(
     };
   } catch (error) {
     const type = classifyError(error);
-
-    // early cleanup on timeout to terminate pending Puppeteer operations
-    if (type === 'timeout') {
-      await cleanup();
-    }
-
     const { message, stack } = formatError(error);
     const details: ExecutionError['details'] = { type };
 
@@ -299,6 +292,6 @@ export async function executeCode(
       logs,
     };
   } finally {
-    await cleanup();
+    cleanup();
   }
 }
