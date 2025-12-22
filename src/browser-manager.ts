@@ -77,7 +77,10 @@ export async function waitForPersistentIdle(): Promise<void> {
 
 export async function withPersistentLock<T>(fn: () => Promise<T>): Promise<T> {
   const previousLock = executionLock;
-  const { promise, resolve } = Promise.withResolvers<undefined>();
+  let resolve!: (value: undefined) => void;
+  const promise = new Promise<undefined>((res) => {
+    resolve = res;
+  });
 
   executionLock = promise;
   await previousLock;

@@ -31,6 +31,10 @@ Traditional MCP (5 round-trips)         pptr-mcp (1 round-trip)
     |                |                      |                |
 ```
 
+## Requirements
+
+- Node.js >= 20
+
 ## Installation
 
 ```bash
@@ -122,6 +126,38 @@ Executes JavaScript code with access to Puppeteer browser.
 | ------------ | ------- | -------- | ---------------------------------- |
 | `code`       | string  | required | JavaScript code to execute         |
 | `persistent` | boolean | true     | Reuse browser session across calls |
+
+## Recipes
+
+### Disable headless mode
+
+Show browser window during execution:
+
+```json
+{
+  "mcpServers": {
+    "puppeteer": {
+      "command": "npx",
+      "args": ["pptr-mcp", "--no-headless"]
+    }
+  }
+}
+```
+
+### Custom Chrome profile directory
+
+Use your own Chrome profile with saved logins and cookies:
+
+```json
+{
+  "mcpServers": {
+    "puppeteer": {
+      "command": "npx",
+      "args": ["pptr-mcp", "--", "--user-data-dir=/path/to/profile"]
+    }
+  }
+}
+```
 
 ## Security
 
