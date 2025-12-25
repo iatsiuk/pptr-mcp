@@ -43,6 +43,43 @@ export interface ExecutionResult {
 
 export type ExecutionResponse = ExecutionResult | ExecutionError;
 
+export interface TabScreenshot {
+  pageId: string;
+  url: string;
+  path: string;
+}
+
+export type ExecutionResponseWithScreenshots = ExecutionResponse & {
+  screenshots: TabScreenshot[];
+};
+
+export async function takeScreenshots(
+  browser: Browser
+): Promise<TabScreenshot[]> {
+  const pages = await browser.pages();
+
+  const results = await Promise.allSettled(
+    pages.map(async (page) => {
+      const pageId = crypto.randomUUID();
+      const filePath = path.join(os.tmpdir(), `${pageId}.jpg`);
+
+      await page.screenshot({
+        path: filePath,
+        type: 'jpeg',
+        quality: 80,
+      });
+
+      return {
+        pageId,
+        url: page.url(),
+        path: filePath,
+      };
+    })
+  );
+
+  return results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+}
+
 export async function saveResultToFile(content: string): Promise<string> {
   await fs.mkdir(RESULTS_DIR, { recursive: true });
   const filePath = path.join(RESULTS_DIR, `${crypto.randomUUID()}.txt`);
@@ -82,14 +119,20 @@ function createConsole(logs: LogEntry[]): VmConsole {
     }
   };
 
-  return Object.fromEntries(
-    (['log', 'error', 'warn', 'info'] as const).map((level) => [
-      level,
-      (...args: unknown[]) => {
-        pushLog(level, ...args);
-      },
-    ])
-  ) as VmConsole;
+  return {
+    log: (...args: unknown[]) => {
+      pushLog('log', ...args);
+    },
+    error: (...args: unknown[]) => {
+      pushLog('error', ...args);
+    },
+    warn: (...args: unknown[]) => {
+      pushLog('warn', ...args);
+    },
+    info: (...args: unknown[]) => {
+      pushLog('info', ...args);
+    },
+  };
 }
 
 export function wrapUserCode(code: string): string {

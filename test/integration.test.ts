@@ -1,14 +1,29 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   closePersistentBrowser,
   resetBrowserState,
+  setProfileDir,
   getProfileDir,
 } from '../src/browser-manager.js';
-import fs from 'node:fs/promises';
 import { createServer } from '../src/index.js';
+
+const TEST_PROFILE_DIR = path.join(
+  os.tmpdir(),
+  `pptr-mcp-integration-${crypto.randomUUID()}`
+);
+
+interface TabScreenshot {
+  pageId: string;
+  url: string;
+  path: string;
+}
 
 interface ExecutionResponse {
   success: boolean;
@@ -20,6 +35,7 @@ interface ExecutionResponse {
     suggestion?: string;
   };
   logs: { level: string; args: unknown[] }[];
+  screenshots: TabScreenshot[];
 }
 
 function parseResponse(content: unknown[]): ExecutionResponse {
@@ -44,6 +60,7 @@ void describe('integration', () => {
   const { server } = createServer(noopLogger);
 
   before(async () => {
+    setProfileDir(TEST_PROFILE_DIR);
     await server.connect(serverTransport);
     await client.connect(clientTransport);
   });
@@ -53,6 +70,7 @@ void describe('integration', () => {
     resetBrowserState();
     await client.close();
     await server.close();
+    await fs.rm(TEST_PROFILE_DIR, { recursive: true, force: true });
   });
 
   void it('executes valid code and returns success', async () => {
@@ -404,5 +422,124 @@ void describe('integration', () => {
       (getResponse.result as string).includes('test=relaunch'),
       'cookie should persist after browser relaunch'
     );
+  });
+
+  void it('response includes screenshots array on success', async () => {
+    const result = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('about:blank');
+          return 'done';
+        `,
+        persistent: true,
+      },
+    });
+
+    const response = parseResponse(result.content as unknown[]);
+
+    assert.strictEqual(response.success, true);
+    assert.ok(
+      Array.isArray(response.screenshots),
+      'should have screenshots array'
+    );
+    assert.ok(
+      response.screenshots.length > 0,
+      'should have at least one screenshot'
+    );
+
+    const [screenshot] = response.screenshots;
+
+    assert.ok(screenshot, 'should have screenshot entry');
+    assert.ok(screenshot.pageId, 'should have pageId');
+    assert.ok(screenshot.url, 'should have url');
+    assert.ok(screenshot.path, 'should have path');
+
+    for (const s of response.screenshots) {
+      await fs.unlink(s.path).catch(() => {});
+    }
+  });
+
+  void it('response includes screenshots array on error', async () => {
+    const result = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const page = await browser.newPage();
+          await page.goto('about:blank');
+          throw new Error('test error');
+        `,
+        persistent: true,
+      },
+    });
+
+    const response = parseResponse(result.content as unknown[]);
+
+    assert.strictEqual(response.success, false);
+    assert.ok(
+      Array.isArray(response.screenshots),
+      'should have screenshots array'
+    );
+    assert.ok(
+      response.screenshots.length > 0,
+      'should capture screenshot even on error'
+    );
+
+    for (const s of response.screenshots) {
+      await fs.unlink(s.path).catch(() => {});
+    }
+  });
+
+  void it('response has screenshots: [] when all pages closed', async () => {
+    const result = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const pages = await browser.pages();
+          for (const page of pages) {
+            await page.close();
+          }
+          return 'all closed';
+        `,
+        persistent: true,
+      },
+    });
+
+    const response = parseResponse(result.content as unknown[]);
+
+    assert.strictEqual(response.success, true);
+    assert.deepStrictEqual(response.screenshots, []);
+  });
+
+  void it('multiple tabs produce multiple screenshot entries', async () => {
+    const result = await client.callTool({
+      name: 'execute',
+      arguments: {
+        code: `
+          const pages = await browser.pages();
+          for (const page of pages) {
+            await page.close();
+          }
+          await browser.newPage();
+          await browser.newPage();
+          return 'two tabs';
+        `,
+        persistent: true,
+      },
+    });
+
+    const response = parseResponse(result.content as unknown[]);
+
+    assert.strictEqual(response.success, true);
+    assert.strictEqual(
+      response.screenshots.length,
+      2,
+      'should have 2 screenshots'
+    );
+
+    for (const s of response.screenshots) {
+      await fs.unlink(s.path).catch(() => {});
+    }
   });
 });

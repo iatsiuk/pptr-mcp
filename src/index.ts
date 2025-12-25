@@ -13,7 +13,12 @@ import {
 } from './browser-manager.js';
 import { createLogger, type Logger } from './logger.js';
 import { executeDescription } from './tool-descriptions.js';
-import { executeCode } from './vm-executor.js';
+import {
+  executeCode,
+  takeScreenshots,
+  type TabScreenshot,
+  type ExecutionResponseWithScreenshots,
+} from './vm-executor.js';
 
 const DEFAULT_TIMEOUT = 30000;
 
@@ -95,12 +100,25 @@ export function createServer(logger?: Logger): ServerWithLogger {
         };
       }
 
-      const execute = () => executeCode(code, browser, timeout);
+      const executeAndCapture =
+        async (): Promise<ExecutionResponseWithScreenshots> => {
+          const response = await executeCode(code, browser, timeout);
+
+          let screenshots: TabScreenshot[] = [];
+
+          try {
+            screenshots = await takeScreenshots(browser);
+          } catch {
+            // global failure - return empty array
+          }
+
+          return { ...response, screenshots };
+        };
 
       try {
         const response = persistent
-          ? await withPersistentLock(execute)
-          : await execute();
+          ? await withPersistentLock(executeAndCapture)
+          : await executeAndCapture();
 
         return {
           content: [{ type: 'text', text: JSON.stringify(response) }],

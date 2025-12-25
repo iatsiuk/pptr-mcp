@@ -3,17 +3,30 @@ import os from 'node:os';
 import path from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer-core';
 import { ensureBrowserInstalled } from './browser-installer.js';
-import { type ErrorType, type ExecutionError } from './vm-executor.js';
+import {
+  type ErrorType,
+  type ExecutionResponseWithScreenshots,
+} from './vm-executor.js';
 
-const PROFILE_DIR = path.join(os.homedir(), '.cache', 'pptr-mcp', 'profile');
+const DEFAULT_PROFILE_DIR = path.join(
+  os.homedir(),
+  '.cache',
+  'pptr-mcp',
+  'profile'
+);
+let profileDir = DEFAULT_PROFILE_DIR;
+
+export function setProfileDir(dir: string): void {
+  profileDir = dir;
+}
 
 export function getCustomChromePath(): string | undefined {
   return process.env['CHROME_PATH'] ?? process.env['PUPPETEER_EXECUTABLE_PATH'];
 }
 
 export async function getProfileDir(): Promise<string> {
-  await fs.mkdir(PROFILE_DIR, { recursive: true });
-  return PROFILE_DIR;
+  await fs.mkdir(profileDir, { recursive: true });
+  return profileDir;
 }
 
 const DEFAULT_ARGS = [
@@ -41,11 +54,35 @@ export function setBrowserConfig(newConfig: Partial<BrowserConfig>): void {
   config = { headless: true, chromeArgs: [], ...newConfig };
 }
 
+// extract --user-data-dir from chromeArgs if present
+function extractUserDataDir(chromeArgs: string[]): {
+  userDataDir: string | undefined;
+  filteredArgs: string[];
+} {
+  let userDataDir: string | undefined;
+  const filteredArgs: string[] = [];
+
+  for (const arg of chromeArgs) {
+    if (arg.startsWith('--user-data-dir=')) {
+      userDataDir = arg.slice('--user-data-dir='.length);
+    } else {
+      filteredArgs.push(arg);
+    }
+  }
+
+  return { userDataDir, filteredArgs };
+}
+
 export async function launchBrowser(profilePath?: string): Promise<Browser> {
   const executablePath =
     getCustomChromePath() ?? (await ensureBrowserInstalled());
 
-  const args = [...DEFAULT_ARGS, ...config.chromeArgs];
+  const { userDataDir: customDataDir, filteredArgs } = extractUserDataDir(
+    config.chromeArgs
+  );
+  const effectiveProfilePath = customDataDir ?? profilePath;
+
+  const args = [...DEFAULT_ARGS, ...filteredArgs];
 
   if (config.headless) {
     args.push(...HEADLESS_ARGS);
@@ -63,7 +100,7 @@ export async function launchBrowser(profilePath?: string): Promise<Browser> {
     executablePath,
     defaultViewport: config.viewport ?? null,
     pipe: true,
-    ...(profilePath && { userDataDir: profilePath }),
+    ...(effectiveProfilePath && { userDataDir: effectiveProfilePath }),
   });
 }
 
@@ -142,6 +179,7 @@ export function resetBrowserState(): void {
   launchPromise = null;
   executionLock = Promise.resolve();
   config = { headless: true, chromeArgs: [] };
+  profileDir = DEFAULT_PROFILE_DIR;
 }
 
 export function isProfileLockError(error: unknown): boolean {
@@ -158,7 +196,7 @@ export function isProfileLockError(error: unknown): boolean {
 
 export function getLaunchErrorSuggestion(error: unknown): string {
   if (isProfileLockError(error)) {
-    return `Profile is locked by another process. Close other pptr-mcp instances or use persistent=false for isolated sessions. Profile location: ${PROFILE_DIR}`;
+    return `Profile is locked by another process. Close other pptr-mcp instances or use persistent=false for isolated sessions. Profile location: ${profileDir}`;
   }
 
   return 'Check Chrome installation or set CHROME_PATH';
@@ -168,11 +206,12 @@ export function createErrorResponse(
   type: ErrorType,
   error: string,
   suggestion?: string
-): ExecutionError {
+): ExecutionResponseWithScreenshots {
   return {
-    success: false,
+    success: false as const,
     error,
     details: { type, ...(suggestion && { suggestion }) },
     logs: [],
+    screenshots: [],
   };
 }

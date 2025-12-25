@@ -6,7 +6,7 @@ MCP server for browser automation via Puppeteer. Unlike other browser MCPs that 
 
 Most browser MCP servers provide a limited set of predefined actions. This approach requires multiple round-trips for complex workflows and can't handle edge cases.
 
-**pptr-mcp** takes a different approach: it exposes a single `execute` tool that runs your JavaScript code in a sandboxed Node.js VM with a `browser` global. You write Puppeteer code directly, getting full API access in one call.
+**pptr-mcp** takes a different approach: it exposes a single `execute` tool that runs your JavaScript code in a Node.js VM with a `browser` global. You write Puppeteer code directly, getting full API access in one call.
 
 ```
 Traditional MCP (5 round-trips)         pptr-mcp (1 round-trip)

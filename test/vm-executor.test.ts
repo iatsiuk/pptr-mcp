@@ -4,9 +4,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Browser } from 'puppeteer-core';
 
+import os from 'node:os';
 import {
   executeCode,
   safeSerialize,
+  takeScreenshots,
   MAX_RESULT_LENGTH,
 } from '../src/vm-executor.js';
 import { launchBrowser } from '../src/browser-manager.js';
@@ -319,6 +321,97 @@ void describe('executeCode', () => {
     } finally {
       writeFileMock.mock.restore();
       mkdirMock.mock.restore();
+    }
+  });
+});
+
+void describe('takeScreenshots', () => {
+  let browser: Browser;
+
+  beforeEach(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterEach(async () => {
+    await browser.close();
+  });
+
+  void it('returns empty array when no pages open', async () => {
+    const pages = await browser.pages();
+
+    for (const page of pages) {
+      await page.close();
+    }
+
+    const result = await takeScreenshots(browser);
+
+    assert.deepStrictEqual(result, []);
+  });
+
+  void it('returns array with one entry for single page', async () => {
+    const pages = await browser.pages();
+
+    for (const page of pages) {
+      await page.close();
+    }
+    await browser.newPage();
+
+    const result = await takeScreenshots(browser);
+
+    assert.strictEqual(result.length, 1);
+  });
+
+  void it('each entry has pageId, url, and path fields', async () => {
+    const page = await browser.newPage();
+
+    await page.goto('about:blank');
+
+    const result = await takeScreenshots(browser);
+    const [entry] = result;
+
+    assert.ok(entry, 'should have at least one entry');
+    assert.ok(typeof entry.pageId === 'string', 'pageId should be string');
+    assert.ok(entry.pageId.length > 0, 'pageId should not be empty');
+    assert.ok(typeof entry.url === 'string', 'url should be string');
+    assert.ok(typeof entry.path === 'string', 'path should be string');
+  });
+
+  void it('files exist at specified paths in os.tmpdir()', async () => {
+    await browser.newPage();
+
+    const result = await takeScreenshots(browser);
+    const [entry] = result;
+
+    assert.ok(entry, 'should have entry');
+    assert.ok(entry.path.startsWith(os.tmpdir()), 'path should be in tmpdir');
+    assert.ok(entry.path.endsWith('.jpg'), 'path should end with .jpg');
+
+    const stat = await fs.stat(entry.path);
+
+    assert.ok(stat.isFile(), 'screenshot file should exist');
+
+    await fs.unlink(entry.path);
+  });
+
+  void it('returns partial results when one page fails (Promise.allSettled)', async () => {
+    const goodPage = await browser.newPage();
+
+    await goodPage.goto('about:blank');
+
+    const badPage = await browser.newPage();
+
+    await badPage.goto('about:blank');
+    await badPage.close();
+
+    const result = await takeScreenshots(browser);
+
+    assert.ok(
+      result.length >= 1,
+      'should have at least one result from good page'
+    );
+
+    for (const entry of result) {
+      await fs.unlink(entry.path).catch(() => {});
     }
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, afterEach, mock } from 'node:test';
+import { describe, it, before, after, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -11,15 +11,30 @@ import {
   closePersistentBrowser,
   resetBrowserState,
   setBrowserConfig,
+  setProfileDir,
   isProfileLockError,
   getLaunchErrorSuggestion,
 } from '../src/browser-manager.js';
 import { saveResultToFile } from '../src/vm-executor.js';
 
+const TEST_PROFILE_DIR = path.join(
+  os.tmpdir(),
+  `pptr-mcp-test-${crypto.randomUUID()}`
+);
+
 void describe('browser-manager', () => {
+  before(() => {
+    setProfileDir(TEST_PROFILE_DIR);
+  });
+
+  after(async () => {
+    await fs.rm(TEST_PROFILE_DIR, { recursive: true, force: true });
+  });
+
   afterEach(async () => {
     await closePersistentBrowser();
     resetBrowserState();
+    setProfileDir(TEST_PROFILE_DIR);
   });
 
   void describe('setBrowserConfig', () => {
@@ -66,6 +81,31 @@ void describe('browser-manager', () => {
       } finally {
         await browser.close();
         // direct cleanup - test profile is outside managed directory
+        await fs.rm(customPath, { recursive: true, force: true });
+      }
+    });
+
+    void it('uses --user-data-dir from chromeArgs over default', async () => {
+      const customPath = path.join(
+        os.tmpdir(),
+        `pptr-mcp-chromearg-profile-${crypto.randomUUID()}`
+      );
+
+      setBrowserConfig({
+        headless: true,
+        chromeArgs: [`--user-data-dir=${customPath}`],
+      });
+
+      const browser = await launchBrowser();
+
+      try {
+        assert.ok(browser.connected, 'browser should be connected');
+        // verify profile was created at custom path
+        const stats = await fs.stat(customPath);
+
+        assert.ok(stats.isDirectory(), 'custom profile dir should exist');
+      } finally {
+        await browser.close();
         await fs.rm(customPath, { recursive: true, force: true });
       }
     });
