@@ -2,11 +2,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer-core';
-import { ensureBrowserInstalled } from './browser-installer.js';
+import { ensureBrowserInstalled } from './browser-installer.ts';
 import {
   type ErrorType,
   type ExecutionResponseWithScreenshots,
-} from './vm-executor.js';
+} from './vm-executor.ts';
 
 const DEFAULT_PROFILE_DIR = path.join(
   os.homedir(),
@@ -138,7 +138,6 @@ export async function getPersistentBrowser(): Promise<Browser> {
     return launchPromise;
   }
 
-  // wrap in async IIFE to capture promise synchronously before any await
   launchPromise = (async () => {
     const profileDir = await getProfileDir();
 
@@ -158,17 +157,11 @@ export async function getPersistentBrowser(): Promise<Browser> {
 
 export async function closePersistentBrowser(): Promise<void> {
   if (launchPromise) {
-    try {
-      await launchPromise;
-    } catch {
-      // ignore launch errors during close
-    }
+    await launchPromise.catch(() => {});
   }
 
   if (persistentBrowser) {
-    await persistentBrowser.close().catch(() => {
-      // ignore
-    });
+    await persistentBrowser.close().catch(() => {});
     persistentBrowser = null;
   }
   launchPromise = null;

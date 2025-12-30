@@ -159,6 +159,24 @@ Use your own Chrome profile with saved logins and cookies:
 }
 ```
 
+### Use system Chrome instead of downloaded
+
+By default, pptr-mcp downloads Chrome for Testing - a version optimized and tested for the bundled Puppeteer. To use your system Chrome instead:
+
+```json
+{
+  "mcpServers": {
+    "puppeteer": {
+      "command": "npx",
+      "args": ["pptr-mcp"],
+      "env": {
+        "CHROME_PATH": "/path/to/chrome"
+      }
+    }
+  }
+}
+```
+
 ## Security
 
 This server is designed for **trusted local development** with LLM assistants (Claude Code, Cursor, etc.). The executing code comes from the LLM at your request.

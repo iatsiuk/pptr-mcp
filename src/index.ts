@@ -3,22 +3,21 @@ import type { Browser } from 'puppeteer-core';
 import pptrPkg from 'puppeteer-core/package.json' with { type: 'json' };
 import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
-import { getInstallStatus } from './browser-installer.js';
+import { getInstallStatus } from './browser-installer.ts';
 import {
   getPersistentBrowser,
   launchBrowser,
   createErrorResponse,
   withPersistentLock,
   getLaunchErrorSuggestion,
-} from './browser-manager.js';
-import { createLogger, type Logger } from './logger.js';
-import { executeDescription } from './tool-descriptions.js';
+} from './browser-manager.ts';
+import { createLogger, type Logger } from './logger.ts';
+import { executeDescription } from './tool-descriptions.ts';
 import {
   executeCode,
   takeScreenshots,
-  type TabScreenshot,
   type ExecutionResponseWithScreenshots,
-} from './vm-executor.js';
+} from './vm-executor.ts';
 
 const DEFAULT_TIMEOUT = 30000;
 
@@ -104,13 +103,7 @@ export function createServer(logger?: Logger): ServerWithLogger {
         async (): Promise<ExecutionResponseWithScreenshots> => {
           const response = await executeCode(code, browser, timeout);
 
-          let screenshots: TabScreenshot[] = [];
-
-          try {
-            screenshots = await takeScreenshots(browser);
-          } catch {
-            // global failure - return empty array
-          }
+          const screenshots = await takeScreenshots(browser).catch(() => []);
 
           return { ...response, screenshots };
         };
@@ -126,9 +119,7 @@ export function createServer(logger?: Logger): ServerWithLogger {
         };
       } finally {
         if (!persistent) {
-          await browser.close().catch(() => {
-            // ignore close errors for isolated browser
-          });
+          await browser.close().catch(() => {});
         }
       }
     }

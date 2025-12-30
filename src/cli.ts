@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ensureBrowserInstalled } from './browser-installer.js';
+import { ensureBrowserInstalled } from './browser-installer.ts';
 import {
   setBrowserConfig,
   closePersistentBrowser,
   waitForPersistentIdle,
-} from './browser-manager.js';
-import { parseArgs, HELP_TEXT } from './cli-args.js';
-import { server, log } from './index.js';
+} from './browser-manager.ts';
+import { parseArgs, HELP_TEXT } from './cli-args.ts';
+import { server, log } from './index.ts';
 
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 
@@ -21,12 +21,8 @@ async function gracefulShutdown(reason: string): Promise<void> {
 
   await Promise.race([
     (async () => {
-      await waitForPersistentIdle().catch(() => {
-        // ignore - best effort
-      });
-      await closePersistentBrowser().catch(() => {
-        // ignore - best effort
-      });
+      await waitForPersistentIdle().catch(() => {});
+      await closePersistentBrowser().catch(() => {});
     })(),
     new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
   ]);

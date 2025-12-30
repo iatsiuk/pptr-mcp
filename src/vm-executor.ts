@@ -97,7 +97,6 @@ export function safeSerialize(value: unknown): unknown {
   try {
     const serialized = JSON.stringify(value);
 
-    // JSON.stringify returns undefined for functions, symbols, etc.
     if (typeof serialized !== 'string') {
       return inspect(value, INSPECT_OPTIONS);
     }
