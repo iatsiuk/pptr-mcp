@@ -79,8 +79,10 @@ async function doEnsureBrowser(): Promise<string> {
         installStatus = { installing: true, progress };
       },
     });
-  } finally {
     installStatus = { installing: false, progress: 100 };
+  } catch (err) {
+    installStatus = { installing: false, progress: 0 };
+    throw err;
   }
 
   cachedExecutablePath = computeExecutablePath({

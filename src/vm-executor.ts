@@ -168,23 +168,13 @@ function createContext(
 ): vm.Context {
   const { setTimeout, clearTimeout } = createTrackedTimers(timers);
 
+  // vm.createContext provides its own JS primitives (Object, Array, Promise, etc.)
+  // only pass Node.js-specific APIs that are needed
   return vm.createContext({
     browser,
     console: createConsole(logs),
     setTimeout,
     clearTimeout,
-    JSON,
-    Array,
-    Object,
-    String,
-    Number,
-    Boolean,
-    Date,
-    RegExp,
-    Error,
-    Map,
-    Set,
-    Promise,
     URL,
     URLSearchParams,
     Buffer,

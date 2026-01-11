@@ -7,6 +7,7 @@ import { getInstallStatus } from './browser-installer.ts';
 import {
   getPersistentBrowser,
   launchBrowser,
+  closePersistentBrowser,
   createErrorResponse,
   withPersistentLock,
   getLaunchErrorSuggestion,
@@ -19,7 +20,9 @@ import {
   type ExecutionResponseWithScreenshots,
 } from './vm-executor.ts';
 
-const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_TIMEOUT = 30_000;
+const MIN_TIMEOUT = 1_000;
+const MAX_TIMEOUT = 300_000;
 
 interface ServerWithLogger {
   server: McpServer;
@@ -70,10 +73,11 @@ export function createServer(logger?: Logger): ServerWithLogger {
         };
       }
 
-      const timeout = parseInt(
-        process.env['PPTR_MCP_TIMEOUT'] ?? String(DEFAULT_TIMEOUT),
-        10
-      );
+      const rawTimeout = Number(process.env['PPTR_MCP_TIMEOUT']);
+      const timeout =
+        Number.isFinite(rawTimeout) && rawTimeout > 0
+          ? Math.min(Math.max(rawTimeout, MIN_TIMEOUT), MAX_TIMEOUT)
+          : DEFAULT_TIMEOUT;
 
       log.info('execute', {
         codeLength: code.length,
@@ -112,6 +116,16 @@ export function createServer(logger?: Logger): ServerWithLogger {
         const response = persistent
           ? await withPersistentLock(executeAndCapture)
           : await executeAndCapture();
+
+        // reset browser on timeout to stop any in-flight async Puppeteer work
+        if (
+          persistent &&
+          !response.success &&
+          response.details.type === 'timeout'
+        ) {
+          log.warning('browser', { status: 'reset-after-timeout' });
+          await closePersistentBrowser().catch(() => {});
+        }
 
         return {
           content: [{ type: 'text', text: JSON.stringify(response) }],
